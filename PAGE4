@@ -136,9 +136,9 @@
                     <div class="volume-subtitle">容積 A</div>
 
                     <select v-model="volumeAType" class="volume-select">
-                      <option value="住1">住1</option>
-                      <option value="住2">住2</option>
-                      <option value="住3">住3</option>
+                      <option value="第一種住宅區 60%">第一種住宅區 60%</option>
+                      <option value="第二種住宅區 120%">第二種住宅區 120%</option>
+                      <option value="第三種住宅區 225%">第三種住宅區 225%</option>
                     </select>
                   </div>
 
@@ -163,9 +163,9 @@
                     <div class="volume-subtitle">容積 B</div>
 
                     <select v-model="volumeBType" class="volume-select">
-                      <option value="住1">住1</option>
-                      <option value="住2">住2</option>
-                      <option value="住3">住3</option>
+                      <option value="第一種住宅區 60%">第一種住宅區 60%</option>
+                      <option value="第二種住宅區 120%">第二種住宅區 120%</option>
+                      <option value="第三種住宅區 225%">第三種住宅區 225%</option>
                     </select>
                   </div>
 
@@ -182,9 +182,9 @@
                     <div class="volume-subtitle">全街廓容積設定</div>
 
                     <select v-model="fullBlockVolumeType" class="volume-select">
-                      <option value="住1">住1</option>
-                      <option value="住2">住2</option>
-                      <option value="住3">住3</option>
+                      <option value="第一種住宅區 60%">第一種住宅區 60%</option>
+                      <option value="第二種住宅區 120%">第二種住宅區 120%</option>
+                      <option value="第三種住宅區 225%">第三種住宅區 225%</option>
                     </select>
                   </div>
                 </div>
@@ -193,7 +193,7 @@
               <template v-else>
                 <div class="volume-section">
                   <div class="renewal-text">
-                    本區域都更容積為 <strong>{{ renewalVolumeText }}</strong>
+                    本區域都更容積率為 <strong>{{ renewalVolumeText }}</strong>
                     ，將重新分配至屋頂再生空間
                   </div>
                 </div>
@@ -452,7 +452,7 @@
         </template>
 
         <!-- ==================== 第 4 頁 ==================== -->
-        <template v-else>
+        <template v-else-if="currentStep === 4">
           <div class="step-page">
             <button class="back-mini-btn" type="button" @click="goPrevStep">
               ← 回到上一頁
@@ -566,12 +566,45 @@
             </div>
           </div>
         </template>
+
+        <!-- ==================== 第 5 頁 ==================== -->
+        <template v-else-if="currentStep === 5">
+          <div class="step-page">
+            <button class="back-mini-btn" type="button" @click="goToStep4">
+              ← 回到上一頁
+            </button>
+
+            <!-- 第五頁內容先清空，之後自行新增 -->
+          </div>
+        </template>
       </div>
 
       <!-- 左側底部 -->
       <div class="sidebar-footer">
+        <template v-if="currentStep === 4">
+          <div class="sidebar-footer-action-row">
+            <button
+              class="sidebar-footer-action-btn sidebar-footer-save-btn"
+              type="button"
+              @click="saveCompareResultCsv"
+              :disabled="sortedCompareItems.length === 0"
+            >
+              儲存
+            </button>
+
+            <button
+              class="sidebar-footer-action-btn sidebar-footer-mutate-btn"
+              type="button"
+              @click="goToMutationPage"
+              :disabled="sortedCompareItems.length === 0"
+            >
+              變異
+            </button>
+          </div>
+        </template>
+
         <button
-          v-if="currentStep < 4"
+          v-else-if="currentStep < TOTAL_STEPS"
           class="sidebar-next-btn"
           type="button"
           @click="goNextStep"
@@ -579,6 +612,8 @@
           繼續
         </button>
       </div>
+
+
 
       <!-- 側頁內小彈窗 -->
       <div v-if="showUpdateModal" class="side-modal-overlay">
@@ -678,7 +713,7 @@
 
           <div class="eval-preview-bottom">
             <div class="eval-preview-score">
-              占比 {{ formatPercent(item.totalShare) }}
+              綜合分數 {{ formatPercent(item.totalShare) }}
             </div>
 
             <button
@@ -691,6 +726,8 @@
           </div>
         </div>
       </div>
+
+
 
       <div class="debug-box">
         {{ debugMessage }}
@@ -792,7 +829,7 @@ const debugMessage = ref('等待初始化場景')
 
 // 頁面步驟
 const currentStep = ref(1)
-const TOTAL_STEPS = 4
+const TOTAL_STEPS = 5
 
 /* =========================
    第 1 頁資料
@@ -828,9 +865,9 @@ const pieDashOffset = computed(() => {
 // 第二頁資料
 const volumeMode = ref('different')
 
-const volumeAType = ref('住1')
-const volumeBType = ref('住2')
-const fullBlockVolumeType = ref('住1')
+const volumeAType = ref('第一種住宅區 60%')
+const volumeBType = ref('第二種住宅區 120%')
+const fullBlockVolumeType = ref('第一種住宅區 60%')
 
 const blockOptions = [
   '街廓1',
@@ -848,7 +885,19 @@ const blockOptions = [
 ]
 
 const selectedBlocksA = ref([])
-const renewalVolumeText = ref('xxxxx')
+
+// 都更模式：容積率 = (建物體積 ÷ 單層高度) ÷ 屋頂水平投影面積
+const FLOOR_HEIGHT = 3
+const renewalFloorAreaRatio = ref(0)
+
+const renewalVolumeText = computed(() => {
+  if (renewalFloorAreaRatio.value <= 0) {
+    return '尚未生成'
+  }
+
+  return `${(renewalFloorAreaRatio.value * 100).toFixed(2)}%`
+})
+
 const resultBars = ref([])
 
 const unselectedBlocks = computed(() => {
@@ -1204,6 +1253,43 @@ function countMeshInObject(object) {
   return count
 }
 
+function escapeCsvValue(value) {
+  const text = String(value ?? '')
+  const escaped = text.replace(/"/g, '""')
+  return `"${escaped}"`
+}
+
+function buildCompareCsvContent() {
+  const headers = [
+    '排名',
+    '選擇的底圖',
+    '容積分配',
+    '容積率',
+    '新增居住單元總數',
+    '屋頂綠化面積',
+    '居民平均公共空間密度'
+  ]
+
+  const rows = sortedCompareItems.value.map((item, index) => {
+    return [
+      index + 1,
+      currentModelName.value || '尚未載入',
+      item.textA || '',
+      item.textB || '',
+      item.deadCount || 0,
+      item.aliveCount || 0,
+      formatDensity(item.densityValue)
+    ]
+  })
+
+  const csvLines = [
+    headers.map(escapeCsvValue).join(','),
+    ...rows.map((row) => row.map(escapeCsvValue).join(','))
+  ]
+
+  return '\uFEFF' + csvLines.join('\n')
+}
+
 /* =========================
    頁面切換
 ========================= */
@@ -1217,6 +1303,21 @@ function goPrevStep() {
   if (currentStep.value > 1) {
     currentStep.value -= 1
   }
+}
+
+function goToStep4() {
+  currentStep.value = 4
+  setDebug('已返回第四頁評比')
+}
+
+function goToMutationPage() {
+  if (!sortedCompareItems.value.length) {
+    setDebug('目前沒有評比結果，無法進入突變頁')
+    return
+  }
+
+  currentStep.value = 5
+  setDebug('已進入第五頁突變結果')
 }
 
 function goBackToStep2() {
@@ -1342,6 +1443,62 @@ async function selectComparePreview(compareId) {
 
   selectedPreviewCompareId.value = compareId
   await loadComparePreviewModelsByModeKey(targetItem.modeKey)
+}
+
+async function saveCompareResultCsv() {
+  if (!sortedCompareItems.value.length) {
+    setDebug('沒有評比資料可儲存')
+    return
+  }
+
+  try {
+    const csvContent = buildCompareCsvContent()
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const fileName = `CAUR_評比結果_${Date.now()}.csv`
+
+    // 優先使用可選儲存位置
+    if ('showSaveFilePicker' in window) {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: fileName,
+        types: [
+          {
+            description: 'CSV 檔案',
+            accept: {
+              'text/csv': ['.csv']
+            }
+          }
+        ]
+      })
+
+      const writable = await handle.createWritable()
+      await writable.write(blob)
+      await writable.close()
+
+      setDebug('評比結果 CSV 已儲存')
+      return
+    }
+
+    // 不支援時改用下載
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    setDebug('目前瀏覽器不支援指定儲存位置，已改用下載 CSV')
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      setDebug('已取消儲存 CSV')
+      return
+    }
+
+    console.error(error)
+    setDebug(`CSV 儲存失敗：${error.message || error}`)
+    alert(`CSV 儲存失敗：${error.message || error}`)
+  }
 }
 
 /* =========================
@@ -1609,6 +1766,7 @@ async function loadModelFromFile(file, options = { preserveView: true }) {
   compareItems.value = []
   selectedPreviewCompareId.value = ''
   compareMetricCache.value = {}
+  renewalFloorAreaRatio.value = 0
 
   try {
     if (extension === 'glb' || extension === 'gltf') {
@@ -1841,7 +1999,10 @@ async function insertGeneratedBuilding() {
     stepApartmentCount.value = countMeshInObject(generatedBuilding)
     normalBuildingCount.value = countMeshInObject(generatedBuildingN)
 
-    setDebug('已置入 model-arch.glb 與 model-arch-n.glb')
+    // 更新第二頁都更容積率
+    updateRenewalFloorAreaRatio()
+
+    setDebug(`已置入 model-arch.glb 與 model-arch-n.glb｜容積率：${renewalVolumeText.value}`)
   } catch (error) {
     console.error(error)
     setDebug('建物生成失敗')
@@ -1904,7 +2065,10 @@ async function insertRoofArea() {
 
     scene.add(roofAreaModel)
 
-    setDebug('已置入 model-roofarea.glb')
+    // 更新第二頁都更容積率
+    updateRenewalFloorAreaRatio()
+
+    setDebug(`已置入 model-roofarea.glb｜容積率：${renewalVolumeText.value}`)
   } catch (error) {
     console.error(error)
     setDebug('屋頂利用範圍生成失敗')
@@ -2014,6 +2178,87 @@ function computeObjectVolume(object) {
   })
 
   return totalVolume
+}
+
+// 計算三角形在 XZ 平面的投影面積
+function triangleAreaXZ(p1, p2, p3) {
+  const ax = p2.x - p1.x
+  const az = p2.z - p1.z
+  const bx = p3.x - p1.x
+  const bz = p3.z - p1.z
+
+  return Math.abs((ax * bz - az * bx) * 0.5)
+}
+
+// 計算單一 mesh 在 XZ 平面的投影面積
+function computeMeshProjectedAreaXZ(mesh) {
+  const geometry = mesh.geometry
+  if (!geometry || !geometry.attributes?.position) return 0
+
+  const pos = geometry.attributes.position
+  const index = geometry.index
+  let area = 0
+
+  mesh.updateWorldMatrix(true, false)
+  const matrix = mesh.matrixWorld
+
+  const p1 = new THREE.Vector3()
+  const p2 = new THREE.Vector3()
+  const p3 = new THREE.Vector3()
+
+  if (index) {
+    for (let i = 0; i < index.count; i += 3) {
+      const a = index.getX(i)
+      const b = index.getX(i + 1)
+      const c = index.getX(i + 2)
+
+      p1.fromBufferAttribute(pos, a).applyMatrix4(matrix)
+      p2.fromBufferAttribute(pos, b).applyMatrix4(matrix)
+      p3.fromBufferAttribute(pos, c).applyMatrix4(matrix)
+
+      area += triangleAreaXZ(p1, p2, p3)
+    }
+  } else {
+    for (let i = 0; i < pos.count; i += 3) {
+      p1.fromBufferAttribute(pos, i).applyMatrix4(matrix)
+      p2.fromBufferAttribute(pos, i + 1).applyMatrix4(matrix)
+      p3.fromBufferAttribute(pos, i + 2).applyMatrix4(matrix)
+
+      area += triangleAreaXZ(p1, p2, p3)
+    }
+  }
+
+  return area
+}
+
+// 計算整個物件在 XZ 平面的投影面積
+function computeObjectProjectedAreaXZ(object) {
+  let totalArea = 0
+
+  object.updateMatrixWorld(true)
+
+  object.traverse((child) => {
+    if (child.isMesh) {
+      totalArea += computeMeshProjectedAreaXZ(child)
+    }
+  })
+
+  return totalArea
+}
+
+// 更新第二頁都更容積率
+function updateRenewalFloorAreaRatio() {
+  if (!generatedBuilding || !roofAreaModel) {
+    renewalFloorAreaRatio.value = 0
+    return
+  }
+
+  const archVolume = computeObjectVolume(generatedBuilding)
+  const totalFloorArea = archVolume / FLOOR_HEIGHT
+  const roofProjectedArea = computeObjectProjectedAreaXZ(roofAreaModel)
+
+  renewalFloorAreaRatio.value =
+    roofProjectedArea > 0 ? totalFloorArea / roofProjectedArea : 0
 }
 
 function applyTransformFromReference(model, referenceModel, extraOffset = {}) {
@@ -2156,7 +2401,7 @@ async function simulateRoofVolume() {
     resultBars.value = [
       {
         key: 'allRe',
-        title: `總容積 ${renewalVolumeText.value}`,
+        title: `容積率 ${renewalVolumeText.value}`,
         units: unitAllRe,
         color: faModelStyle.allRe.color,
         height: 100
@@ -2501,7 +2746,7 @@ watch(currentStep, async (newStep) => {
     initOverviewScene()
   }
 
-  if (newStep === 4) {
+  if (newStep === 4 ) {
     await nextTick()
 
     if (sortedCompareItems.value.length > 0) {
@@ -2871,6 +3116,44 @@ onBeforeUnmount(() => {
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+}
+
+/* 第四頁左側底部動作列 */
+.sidebar-footer-action-row {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* 第四頁左側底部按鈕 */
+.sidebar-footer-action-btn {
+  min-width: 96px;
+  height: 40px;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 儲存按鈕 */
+.sidebar-footer-save-btn {
+  background: #ececec;
+  color: #111111;
+}
+
+/* 變異按鈕 */
+.sidebar-footer-mutate-btn {
+  background: #111111;
+  color: #ffffff;
+}
+
+/* 停用狀態 */
+.sidebar-footer-action-btn:disabled {
+  background: #d4d4d4;
+  color: #8a8a8a;
+  cursor: not-allowed;
 }
 
 /* 側邊彈窗遮罩 */
@@ -3333,7 +3616,7 @@ onBeforeUnmount(() => {
 
 /* 區塊小標題 */
 .volume-subtitle {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 800;
   color: #111111;
 }
@@ -3342,11 +3625,11 @@ onBeforeUnmount(() => {
 .volume-select {
   min-width: 110px;
   height: 40px;
-  padding: 0 12px;
+  padding: 0 10px;
   border: 1px solid #d7d7d7;
   border-radius: 10px;
   background: #ffffff;
-  font-size: 14px;
+  font-size: 12px;
   color: #222222;
   outline: none;
 }
@@ -3368,7 +3651,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: 12px;
   color: #333333;
   cursor: pointer;
   box-sizing: border-box;
@@ -3986,10 +4269,101 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-/* 螢幕較大時三欄 */
-@media (min-width: 960px) {
-  .eval-pie-grid {
-    grid-template-columns: repeat(3, 1fr);
+
+
+/* 第五頁卡片 */
+.mutation-page-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 第五頁說明文字 */
+.mutation-page-text {
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.8;
+  color: #444444;
+}
+
+/* 第五頁列表 */
+.mutation-rank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 第五頁排序卡 */
+.mutation-rank-card {
+  padding: 16px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #ebebeb;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 第五頁卡片表頭 */
+.mutation-rank-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* 第五頁排名 */
+.mutation-rank-no {
+  font-size: 20px;
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 第五頁分數 */
+.mutation-rank-score {
+  font-size: 13px;
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 第五頁資料格線 */
+.mutation-rank-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+/* 第五頁單一欄位 */
+.mutation-rank-item {
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8f8f8;
+  border: 1px solid #ececec;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 第五頁欄位標題 */
+.mutation-rank-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 第五頁欄位內容 */
+.mutation-rank-value {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #444444;
+  word-break: break-word;
+}
+
+
+
+@media (max-width: 860px) {
+  .mutation-rank-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
