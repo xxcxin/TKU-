@@ -1,0 +1,5363 @@
+<template>
+  <div class="app-layout">
+    <!-- 左側側頁 -->
+    <aside class="sidebar">
+      <!-- 左側標頭 -->
+      <div class="sidebar-header">
+        <h1 class="sidebar-title-main">CAUR</h1>
+        <p class="sidebar-title-sub">屋頂都市再生生成系統</p>
+
+        <div class="sidebar-meta-row">
+          <div class="meta-inline-card">
+            <span class="meta-inline-label">使用者</span>
+            <span class="meta-inline-value">{{ userName || '尚未輸入' }}</span>
+          </div>
+
+          <div class="meta-inline-card file-meta-inline-card">
+            <span class="meta-inline-label">地形圖</span>
+            <span class="meta-inline-value file-name-inline">
+              {{ currentModelName || '尚未載入' }}
+            </span>
+
+            <button
+              class="icon-btn"
+              type="button"
+              title="更新檔案"
+              @click="openUpdateModal"
+            >
+              <span class="icon-btn-symbol">🗁</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 左側內容 -->
+      <div class="sidebar-content">
+        <!-- ==================== 第 1 頁 ==================== -->
+        <template v-if="currentStep === 1">
+          <div class="terrain-panel">
+            <div class="terrain-panel-title">地形圖</div>
+
+            <div class="terrain-preview-box">
+              <div ref="overviewRef" class="terrain-preview-canvas"></div>
+            </div>
+
+            <button class="generate-btn" type="button" @click="insertGeneratedBuilding">
+              建物生成
+            </button>
+
+            <div class="analysis-panel">
+              <div class="analysis-title">步登公寓數量分析</div>
+
+              <div class="pie-chart-wrap">
+                <svg viewBox="0 0 120 120" class="pie-chart">
+                  <circle
+                    cx="60"
+                    cy="60"
+                    r="42"
+                    fill="none"
+                    stroke="#e8e8e8"
+                    stroke-width="16"
+                  />
+
+                  <circle
+                    cx="60"
+                    cy="60"
+                    r="42"
+                    fill="none"
+                    stroke="#111111"
+                    stroke-width="16"
+                    :stroke-dasharray="pieDashArray"
+                    :stroke-dashoffset="pieDashOffset"
+                    transform="rotate(-90 60 60)"
+                    stroke-linecap="butt"
+                  />
+                </svg>
+              </div>
+
+              <div class="analysis-text">
+                步登公寓 {{ stepApartmentCount }} 棟 ｜ 一般建築 {{ normalBuildingCount }} 棟
+              </div>
+
+              <div class="analysis-total">
+                總建物 {{ totalBuildingCount }} 棟
+              </div>
+            </div>
+          </div>
+
+          <button class="roof-btn" type="button" @click="insertRoofArea">
+            生成屋頂利用範圍
+          </button>
+        </template>
+
+        <!-- ==================== 第 2 頁 ==================== -->
+        <template v-else-if="currentStep === 2">
+          <div class="step-page">
+            <button class="back-mini-btn" type="button" @click="goPrevStep">
+              ← 回到選擇底圖
+            </button>
+
+            <!-- 段落一 -->
+            <div class="step-page-card volume-card">
+              <div class="volume-title">容積分配設定</div>
+
+              <div class="volume-mode-row">
+                <button
+                  type="button"
+                  class="mode-btn"
+                  :class="{ active: volumeMode === 'different' }"
+                  @click="volumeMode = 'different'"
+                >
+                  街廓不同容積
+                </button>
+
+                <button
+                  type="button"
+                  class="mode-btn"
+                  :class="{ active: volumeMode === 'full' }"
+                  @click="volumeMode = 'full'"
+                >
+                  大街廓容積分配
+                </button>
+
+                <button
+                  type="button"
+                  class="mode-btn"
+                  :class="{ active: volumeMode === 'renewal' }"
+                  @click="volumeMode = 'renewal'"
+                >
+                  容積轉移分配
+                </button>
+              </div>
+
+              <template v-if="volumeMode === 'different'">
+                <div class="volume-section">
+                  <div class="volume-subtitle-row">
+                    <div class="volume-subtitle">容積 A</div>
+
+                    <select v-model="volumeAType" class="volume-select">
+                      <option value="第一種住宅區 60%">第一種住宅區 60%</option>
+                      <option value="第二種住宅區 120%">第二種住宅區 120%</option>
+                      <option value="第三種住宅區 225%">第三種住宅區 225%</option>
+                    </select>
+                  </div>
+
+                  <div class="block-grid">
+                    <label
+                      v-for="block in blockOptions"
+                      :key="block"
+                      class="block-check-item"
+                    >
+                      <input
+                        type="checkbox"
+                        :value="block"
+                        v-model="selectedBlocksA"
+                      />
+                      <span>{{ block }}</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="volume-section">
+                  <div class="volume-subtitle-row">
+                    <div class="volume-subtitle">容積 B</div>
+
+                    <select v-model="volumeBType" class="volume-select">
+                      <option value="第一種住宅區 60%">第一種住宅區 60%</option>
+                      <option value="第二種住宅區 120%">第二種住宅區 120%</option>
+                      <option value="第三種住宅區 225%">第三種住宅區 225%</option>
+                    </select>
+                  </div>
+
+                  <div class="unselected-blocks-text">
+                    <span class="unselected-label">未勾選街廓：</span>
+                    <span>{{ unselectedBlocksText }}</span>
+                  </div>
+                </div>
+              </template>
+
+              <template v-else-if="volumeMode === 'full'">
+                <div class="volume-section">
+                  <div class="volume-subtitle-row full-width">
+                    <div class="volume-subtitle">全街廓容積設定</div>
+
+                    <select v-model="fullBlockVolumeType" class="volume-select">
+                      <option value="第一種住宅區 60%">第一種住宅區 60%</option>
+                      <option value="第二種住宅區 120%">第二種住宅區 120%</option>
+                      <option value="第三種住宅區 225%">第三種住宅區 225%</option>
+                    </select>
+                  </div>
+                </div>
+              </template>
+
+              <template v-else>
+                <div class="volume-section">
+                  <div class="renewal-text">
+                    本區域容積轉移分配 (修)率為 <strong>{{ renewalVolumeText }}</strong>
+                    ，將重新分配至屋頂再生空間
+                  </div>
+                </div>
+              </template>
+
+              <button class="generate-btn volume-sim-btn" type="button" @click="simulateRoofVolume">
+                屋頂空間量體模擬
+              </button>
+            </div>
+
+            <!-- 段落二 -->
+            <div class="step-page-card result-card">
+              <div class="volume-title">空間模擬成果</div>
+
+              <div v-if="resultBars.length > 0" class="result-chart-wrap">
+                <div class="result-chart">
+                  <div
+                    v-for="bar in resultBars"
+                    :key="bar.key"
+                    class="result-bar-col"
+                  >
+                    <div class="result-bar-value">{{ formatUnit(bar.units) }}</div>
+
+                    <div class="result-bar-track">
+                      <div
+                        class="result-bar-fill"
+                        :style="{
+                          height: `${bar.height}%`,
+                          background: bar.color
+                        }"
+                      ></div>
+                    </div>
+
+                    <div class="result-bar-label">{{ bar.title }}</div>
+                    <div class="result-bar-desc">
+                      增加 {{ formatUnit(bar.units) }} 再生單元
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else class="result-empty-text">
+                尚未執行屋頂空間量體模擬
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ==================== 第 3 頁 ==================== -->
+        <template v-else-if="currentStep === 3">
+          <div class="step-page">
+            <button class="back-mini-btn" type="button" @click="goPrevStep">
+              ← 回到容積設定
+            </button>
+
+            <!-- 第一段 -->
+            <div class="step-page-card ca-card">
+              <div class="volume-title">細胞自動機生成量體</div>
+
+              <div class="volume-mode-row">
+                <button
+                  type="button"
+                  class="mode-btn"
+                  :class="{ active: caVolumeMode === 'different' }"
+                  @click="caVolumeMode = 'different'"
+                >
+                  街廓不同容積
+                </button>
+
+                <button
+                  type="button"
+                  class="mode-btn"
+                  :class="{ active: caVolumeMode === 'full' }"
+                  @click="caVolumeMode = 'full'"
+                >
+                  大街廓容積分配
+                </button>
+
+                <button
+                  type="button"
+                  class="mode-btn"
+                  :class="{ active: caVolumeMode === 'renewal' }"
+                  @click="caVolumeMode = 'renewal'"
+                >
+                  容積轉移分配
+                </button>
+              </div>
+
+              <div class="selection-status-card">
+                <div class="selection-status-head">
+                  <div>容積分配方式</div>
+                  <div>容積率設定</div>
+                </div>
+
+                <div class="selection-status-body">
+                  <div class="selection-status-cell">
+                    {{ currentCaModeLabel }}
+                  </div>
+
+                  <div class="selection-status-cell selection-status-cell-right">
+                    <span
+                      class="selection-status-text"
+                      :class="{ 'pending-red-text': isCaVolumeRatePending }"
+                    >
+                      {{ currentCaVolumeRateText }}
+                    </span>
+
+                    <button
+                      v-if="isCaVolumeRatePending"
+                      class="jump-select-btn"
+                      type="button"
+                      @click="goSelectMatchedVolume"
+                    >
+                      選擇..
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ca-action-row">
+                <button class="sub-action-btn" type="button" @click="goBackToStep2">
+                  重新選擇容積
+                </button>
+
+                <button class="generate-btn ca-generate-btn" type="button" @click="generateCaSpace">
+                  量體生成
+                </button>
+              </div>
+            </div>
+
+            <!-- 第二段 -->
+            <div class="step-page-card ca-card">
+              <div class="volume-title">細胞自動機生成再生空間</div>
+
+              <div class="pie-dual-wrap">
+                <div class="pie-block">
+                  <svg viewBox="0 0 120 120" class="pie-chart">
+                    <circle
+                      cx="60"
+                      cy="60"
+                      r="42"
+                      fill="none"
+                      stroke="#e8e8e8"
+                      stroke-width="16"
+                    />
+                    <circle
+                      cx="60"
+                      cy="60"
+                      r="42"
+                      fill="none"
+                      stroke="#111111"
+                      stroke-width="16"
+                      :stroke-dasharray="caPieDashArray"
+                      :stroke-dashoffset="0"
+                      transform="rotate(-90 60 60)"
+                      stroke-linecap="butt"
+                    />
+                  </svg>
+
+                  <div class="analysis-text ca-two-line-text">
+                    <div>公領域 ｜ 私領域</div>
+                    <div>{{ caAliveCount }} 個單元 ｜ {{ caDeadCount }} 個單元</div>
+                  </div>
+
+                  <div class="analysis-total">
+                    共產生 {{ caTotalCount }} 個再生空間單元
+                  </div>
+                </div>
+              </div>
+
+              <div class="analysis-text ca-two-line-text ca-extra-text">
+                <div>屋頂一樓商業空間 ｜ 屋頂一樓開放空間</div>
+                <div>{{ caRoof1Count }} 個單元 ｜ {{ caRoof0Count }} 個單元</div>
+              </div>
+
+              <div class="ca-legend">
+                <div class="ca-legend-item">
+                  <span class="legend-dot legend-dead"></span>
+                  <span>私領域單元</span>
+                </div>
+
+                <div class="ca-legend-item">
+                  <span class="legend-dot legend-alive"></span>
+                  <span>公領域單元</span>
+                </div>
+
+                <div class="ca-legend-item">
+                  <span class="legend-dot legend-roof1"></span>
+                  <span>屋頂一樓商業空間單元</span>
+                </div>
+
+                <div class="ca-legend-item">
+                  <span class="legend-dot legend-roof0"></span>
+                  <span>屋頂一樓開放空間單元</span>
+                </div>
+
+                <div class="ca-legend-item">
+                  <span class="legend-dot legend-tcode"></span>
+                  <span>再生空間垂直動線</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 第三段 -->
+            <div class="step-page-card compare-card">
+              <div class="compare-top-row">
+                <div class="volume-title compare-title">評比結果</div>
+
+                <button
+                  class="sub-action-btn"
+                  type="button"
+                  @click="addCompareItem"
+                  :disabled="compareItems.length >= 3"
+                >
+                  加入評比
+                </button>
+              </div>
+
+              <div v-if="compareItems.length > 0" class="compare-table">
+                <div class="compare-table-head">
+                  <div>序號</div>
+                  <div>容積分配</div>
+                  <div>容積率</div>
+                  <div>操作</div>
+                </div>
+
+                <div
+                  v-for="item in compareItems"
+                  :key="item.id"
+                  class="compare-table-row"
+                >
+                  <div>{{ item.order }}</div>
+                  <div>{{ item.textA }}</div>
+                  <div>
+                    <span :class="{ 'pending-red-text': item.isPending }">
+                      {{ item.textB }}
+                    </span>
+                  </div>
+                  <div>
+                    <button
+                      class="compare-clear-btn"
+                      type="button"
+                      @click="removeCompareItem(item.id)"
+                    >
+                      清除
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else class="result-empty-text">
+                尚未加入評比結果
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ==================== 第 4 頁 ==================== -->
+        <template v-else-if="currentStep === 4">
+          <div class="step-page">
+            <button class="back-mini-btn" type="button" @click="goPrevStep">
+              ← 回到上一頁
+            </button>
+
+            <div class="step-page-card eval-page-card">
+              <div class="volume-title eval-main-title">再生空間評比</div>
+            </div>
+
+            <div class="step-page-card eval-page-card">
+              <div class="volume-title eval-section-title">評比內容</div>
+
+              <div v-if="compareItems.length > 0" class="compare-table compare-table-page4">
+                <div class="compare-table-head compare-table-head-page4">
+                  <div>序號</div>
+                  <div>容積分配</div>
+                  <div>容積率</div>
+                </div>
+
+                <div
+                  v-for="item in compareItems"
+                  :key="item.id"
+                  class="compare-table-row compare-table-row-page4"
+                >
+                  <div>{{ item.order }}</div>
+                  <div>{{ item.textA }}</div>
+                  <div>
+                    <span :class="{ 'pending-red-text': item.isPending }">
+                      {{ item.textB }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else class="result-empty-text">
+                尚未加入評比結果
+              </div>
+            </div>
+
+            <div class="step-page-card eval-page-card">
+              <div class="eval-pie-grid">
+                <div class="eval-pie-card">
+                  <div class="eval-pie-title">新增居住單元總數</div>
+
+                  <div
+                    class="eval-pie-graph"
+                    :style="buildMetricPieStyle('deadCount')"
+                  ></div>
+
+                  <div class="eval-legend-list">
+                    <div
+                      v-for="(item, index) in sortedCompareItems"
+                      :key="`${item.id}-dead`"
+                      class="eval-legend-item"
+                    >
+                      <span
+                        class="eval-legend-dot"
+                        :style="{ background: getRankColor(index) }"
+                      ></span>
+                      <span>#{{ index + 1 }} {{ item.textA }}｜{{ formatPercent(item.deadShare) }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="eval-pie-card">
+                  <div class="eval-pie-title">屋頂綠化面積</div>
+
+                  <div
+                    class="eval-pie-graph"
+                    :style="buildMetricPieStyle('aliveCount')"
+                  ></div>
+
+                  <div class="eval-legend-list">
+                    <div
+                      v-for="(item, index) in sortedCompareItems"
+                      :key="`${item.id}-alive`"
+                      class="eval-legend-item"
+                    >
+                      <span
+                        class="eval-legend-dot"
+                        :style="{ background: getRankColor(index) }"
+                      ></span>
+                      <span>#{{ index + 1 }} {{ item.textA }}｜{{ formatPercent(item.aliveShare) }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="eval-pie-card">
+                  <div class="eval-pie-title">居民平均公共空間密度</div>
+
+                  <div
+                    class="eval-pie-graph"
+                    :style="buildMetricPieStyle('densityValue')"
+                  ></div>
+
+                  <div class="eval-legend-list">
+                    <div
+                      v-for="(item, index) in sortedCompareItems"
+                      :key="`${item.id}-density`"
+                      class="eval-legend-item"
+                    >
+                      <span
+                        class="eval-legend-dot"
+                        :style="{ background: getRankColor(index) }"
+                      ></span>
+                      <span>#{{ index + 1 }} {{ item.textA }}｜{{ formatPercent(item.densityShare) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ==================== 第 5 頁 ==================== -->
+        <template v-else-if="currentStep === 5">
+          <div class="step-page">
+            <button class="back-mini-btn" type="button" @click="goToStep4">
+              ← 回到上一頁
+            </button>
+
+            <div class="step-page-card mutation-page-card">
+              <div class="volume-title eval-main-title">選擇變異項目</div>
+
+              <div v-if="mutationSelectedItem" class="mutation-selected-wrap">
+                <div class="mutation-block-title">已選擇變異項目</div>
+
+                <div class="compare-table compare-table-page5 mutation-selected-table">
+                  <div class="compare-table-head compare-table-head-page5">
+                    <div>序號</div>
+                    <div>容積分配</div>
+                    <div>容積率</div>
+                    <div>操作</div>
+                  </div>
+
+                  <div class="compare-table-row compare-table-row-page5 mutation-selected-row">
+                    <div>#1</div>
+                    <div>{{ mutationSelectedItem.textA }}</div>
+                    <div>{{ mutationSelectedItem.textB }}</div>
+                    <div>
+                      <button
+                        class="compare-clear-btn mutation-action-btn"
+                        type="button"
+                        @click="removeMutationItem"
+                      >
+                        移除
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mutation-list-wrap">
+                <div class="mutation-block-title">變異內容列表</div>
+
+                <div v-if="mutationBaseList.length > 0" class="compare-table compare-table-page5">
+                  <div class="compare-table-head compare-table-head-page5">
+                    <div>序號</div>
+                    <div>容積分配</div>
+                    <div>容積率</div>
+                    <div>操作</div>
+                  </div>
+
+                  <div
+                    v-for="(item, index) in mutationBaseList"
+                    :key="`${item.id}-mutation-base`"
+                    class="compare-table-row compare-table-row-page5"
+                  >
+                    <div>{{ index + 1 }}</div>
+                    <div>{{ item.textA }}</div>
+                    <div>{{ item.textB }}</div>
+                    <div>
+                      <button
+                        v-if="!mutationSelectedItem || mutationSelectedItem.id !== item.id"
+                        class="compare-clear-btn mutation-action-btn"
+                        type="button"
+                        @click="promoteMutationItem(item)"
+                      >
+                        變異
+                      </button>
+
+                      <button
+                        v-else
+                        class="compare-clear-btn mutation-action-btn"
+                        type="button"
+                        @click="removeMutationItem"
+                      >
+                        移除
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-else class="result-empty-text">
+                  尚無可變異項目
+                </div>
+              </div>
+
+              <button
+                class="generate-btn mutation-confirm-btn"
+                type="button"
+                @click="confirmMutationSelection"
+                :disabled="!mutationSelectedItem"
+              >
+                確定
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- 左側底部 -->
+      <div class="sidebar-footer">
+        <template v-if="currentStep === 4">
+          <div class="sidebar-footer-action-row">
+            <button
+              class="sidebar-footer-action-btn sidebar-footer-save-btn"
+              type="button"
+              @click="saveCompareResultCsv"
+              :disabled="sortedCompareItems.length === 0"
+            >
+              儲存
+            </button>
+
+            <button
+              class="sidebar-footer-action-btn sidebar-footer-mutate-btn"
+              type="button"
+              @click="goToMutationPage"
+              :disabled="sortedCompareItems.length === 0"
+            >
+              變異
+            </button>
+          </div>
+        </template>
+
+        <button
+          v-else-if="currentStep < TOTAL_STEPS"
+          class="sidebar-next-btn"
+          type="button"
+          @click="goNextStep"
+        >
+          繼續
+        </button>
+      </div>
+
+
+
+      <!-- 側頁內小彈窗 -->
+      <div v-if="showUpdateModal" class="side-modal-overlay">
+        <div class="side-modal-card">
+          <button class="side-modal-close" type="button" @click="closeUpdateModal">
+            ×
+          </button>
+
+          <div class="side-modal-title">更新檔案</div>
+
+          <div class="side-modal-body">
+            <button class="open-file-btn" type="button" @click="openFilePicker">
+              開啟新檔案
+            </button>
+
+            <p class="side-modal-file-text">
+              {{ pendingFileName || '尚未選擇新檔案' }}
+            </p>
+          </div>
+
+          <div class="side-modal-footer">
+            <button class="modal-cancel-btn" type="button" @click="closeUpdateModal">
+              取消
+            </button>
+
+            <button
+              class="modal-confirm-btn"
+              type="button"
+              :disabled="!pendingFile"
+              @click="confirmUpdateFile"
+            >
+              確定
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 右側預覽區 -->
+    <main class="viewer-area">
+      <div class="viewer-frame">
+        <div ref="containerRef" class="three-canvas"></div>
+      </div>
+
+      <div
+        v-if="currentStep === 4 && sortedCompareItems.length > 0"
+        class="eval-preview-cards"
+      >
+        <div
+          v-for="(item, index) in sortedCompareItems"
+          :key="`${item.id}-preview-card-step-4`"
+          class="eval-preview-card"
+          :class="{
+            inactive: selectedPreviewCompareId && selectedPreviewCompareId !== item.id
+          }"
+          :style="{ width: `${100 / Math.max(sortedCompareItems.length, 1)}%` }"
+        >
+          <div class="eval-preview-rank">#{{ index + 1 }}</div>
+
+          <div class="eval-preview-main-text">
+            <div class="eval-preview-text-a">{{ item.textA }}</div>
+            <div class="eval-preview-text-b">{{ item.textB }}</div>
+          </div>
+
+          <div class="eval-mini-bars">
+            <div class="eval-mini-bar-item">
+              <div class="eval-mini-bar-label">新增居住單元總數</div>
+              <div class="eval-mini-bar-track">
+                <div
+                  class="eval-mini-bar-fill"
+                  :style="{ width: `${item.deadShare}%` }"
+                ></div>
+              </div>
+              <div class="eval-mini-bar-value">{{ item.deadCount }}</div>
+            </div>
+
+            <div class="eval-mini-bar-item">
+              <div class="eval-mini-bar-label">屋頂綠化面積</div>
+              <div class="eval-mini-bar-track">
+                <div
+                  class="eval-mini-bar-fill"
+                  :style="{ width: `${item.aliveShare}%` }"
+                ></div>
+              </div>
+              <div class="eval-mini-bar-value">{{ item.aliveCount }}</div>
+            </div>
+
+            <div class="eval-mini-bar-item">
+              <div class="eval-mini-bar-label">居民平均公共空間密度</div>
+              <div class="eval-mini-bar-track">
+                <div
+                  class="eval-mini-bar-fill"
+                  :style="{ width: `${item.densityShare}%` }"
+                ></div>
+              </div>
+              <div class="eval-mini-bar-value">{{ formatDensity(item.densityValue) }}</div>
+            </div>
+          </div>
+
+          <div class="eval-preview-bottom">
+            <div class="eval-preview-score">
+              綜合分數 {{ formatPercent(item.totalShare) }}
+            </div>
+
+            <button
+              class="eval-show-model-btn"
+              type="button"
+              @click="selectComparePreview(item.id)"
+            >
+              顯示模型
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-else-if="currentStep === 5 && mutationPreviewReady"
+        class="mutation-cards-wrap"
+      >
+        <div
+          v-for="card in mutationDisplayCards"
+          :key="card.key"
+          class="mutation-preview-card"
+          :class="{ expanded: selectedMutationCardKey === card.key }"
+        >
+          <div class="mutation-card-summary">
+            <div class="mutation-card-summary-scale">
+              <div class="mutation-card-summary-media">
+                <div class="mutation-card-image-box">
+                  <img :src="card.image" :alt="card.title" class="mutation-card-image" />
+                </div>
+
+                <div class="mutation-card-summary-side">
+                  <div class="mutation-card-summary-text-group">
+                    <div class="mutation-card-title">{{ card.title }}</div>
+                    <div class="mutation-card-text">{{ card.description }}</div>
+                  </div>
+
+                  <div class="mutation-card-action-row">
+                    <button
+                      v-if="selectedMutationCardKey !== card.key"
+                      class="eval-show-model-btn"
+                      type="button"
+                      @click="selectMutationCard(card.key)"
+                    >
+                      選擇
+                    </button>
+
+                    <div v-else class="mutation-card-selected-tag">已展開</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="selectedMutationCardKey === card.key" class="mutation-card-detail-panel">
+            <div class="mutation-card-detail-scale">
+              <div class="mutation-card-top-actions">
+                <button
+                  class="mini-ghost-btn mutation-back-btn"
+                  type="button"
+                  @click="backToMutationCardSelection"
+                >
+                  回到變異選擇
+                </button>
+              </div>
+
+              <template v-if="card.key === 'internal'">
+                <div class="mutation-detail-grid">
+                  <div
+                    v-for="item in mutationInternalDetails"
+                    :key="item.modelKey"
+                    class="mutation-detail-item"
+                  >
+                    <div class="mutation-detail-top">
+                      <span
+                        class="mutation-color-dot"
+                        :style="{ background: mutationModelStyles[item.modelKey].color }"
+                      ></span>
+                      <span>{{ item.label }} {{ getMutationCount(item.modelKey) }} 單位</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <template v-else-if="card.key === 'external'">
+                <div class="mutation-control-box">
+                  <div class="mutation-inline-row">
+                    <span>需都更的建物</span>
+                    <button class="mini-ghost-btn" type="button" @click="mockSelectRenewalBuilding">icon 選擇</button>
+                    <button class="mini-ghost-btn" type="button" @click="confirmExternalSelection">確定</button>
+                  </div>
+
+                  <div class="mutation-slider-row">
+                    <span>影響範圍</span>
+                    <input v-model.number="externalRange" type="range" min="50" max="300" step="50" />
+                    <span>{{ externalRange }} 公尺</span>
+                  </div>
+
+                  <button class="generate-btn mutation-generate-btn" type="button" @click="generateExternalMutation">
+                    生成都更中繼站
+                  </button>
+                </div>
+
+                <div class="mutation-detail-grid mutation-base-style-grid">
+                  <div
+                    v-for="item in mutationExternalBaseDetails"
+                    :key="item.modelKey"
+                    class="mutation-detail-item"
+                  >
+                    <div class="mutation-detail-top">
+                      <span
+                        class="mutation-color-dot"
+                        :style="{ background: mutationModelStyles[item.modelKey].color }"
+                      ></span>
+                      <span>{{ item.label }} {{ getMutationCount(item.modelKey) }} 單位</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="externalGenerated" class="mutation-detail-grid">
+                  <div
+                    v-for="item in mutationExternalDetails"
+                    :key="item.modelKey"
+                    class="mutation-detail-item"
+                  >
+                    <div class="mutation-detail-top">
+                      <span
+                        class="mutation-color-dot"
+                        :style="{ background: mutationModelStyles[item.modelKey].color }"
+                      ></span>
+                      <span>{{ item.label }} {{ getMutationCount(item.modelKey) }} {{ item.unit }}</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <template v-else>
+                <div class="mutation-control-box">
+                  <div class="mutation-inline-row">
+                    <span>原始街道</span>
+                    <button class="mini-ghost-btn" type="button" @click="mockSelectStreetLine">線段 icon 選擇</button>
+                    <button class="mini-ghost-btn" type="button" @click="confirmHeteroStreet">確定</button>
+                  </div>
+                </div>
+
+                <div v-if="heteroStreetConfirmed" class="mutation-detail-grid">
+                  <div class="mutation-detail-item mutation-detail-item-wide">
+                    <div class="mutation-dual-text-row">
+                      <div><span class="mutation-color-dot" :style="{ background: mutationModelStyles.heteroRoof.color }"></span> 活動屋頂 {{ getMutationCount('heteroRoof') }} 單位</div>
+                      <div><span class="mutation-color-dot" :style="{ background: mutationModelStyles.heteroTcode.color }"></span> 步登公寓樓梯間 {{ getMutationCount('heteroTcode') }} 單位</div>
+                    </div>
+                    <div class="mutation-dual-text-row">
+                      <div><span class="mutation-color-dot" :style="{ background: mutationModelStyles.heteroPatharea.color }"></span> 公共空間 {{ getMutationCount('heteroPatharea') }} 單位</div>
+                      <div><span class="mutation-color-dot" :style="{ background: mutationModelStyles.heteroRoof1.color }"></span> 商業空間 {{ getMutationCount('heteroRoof1') }} 單位</div>
+                    </div>
+                  </div>
+
+                  <div
+                    v-for="item in mutationHeteroStyleDetails"
+                    :key="item.modelKey"
+                    class="mutation-detail-item"
+                  >
+                    <div class="mutation-detail-top">
+                      <span
+                        class="mutation-color-dot"
+                        :style="{ background: mutationModelStyles[item.modelKey].color }"
+                      ></span>
+                      <span>{{ item.label }}</span>
+                    </div>
+                  </div>
+
+                  <div class="mutation-text-note">此路徑建議 {{ heteroSuggestedRangeText }} 公尺　建議活動：慢跑活動</div>
+
+                  <div class="mutation-inline-row mutation-path-row">
+                    <span>活動長度</span>
+                    <input v-model="heteroActivityLength" type="number" class="mutation-number-input" />
+                    <button class="generate-btn mutation-generate-btn" type="button" @click="generateHeteroPath">
+                      生成路徑
+                    </button>
+                  </div>
+
+                  <div v-if="heteroPathGenerated" class="mutation-detail-item mutation-detail-item-wide">
+                    <div class="mutation-detail-top">
+                      <span
+                        class="mutation-color-dot"
+                        :style="{ background: mutationModelStyles.heteroRaps.color }"
+                      ></span>
+                      <span>活動路徑 {{ getMutationCount('heteroRaps') }} 單位</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="debug-box">
+        {{ debugMessage }}
+      </div>
+
+      <div class="preview-toolbar">
+        <button class="toolbar-btn" @click="resetView">重設視角</button>
+        <button class="toolbar-btn" @click="toggleGrid">格線</button>
+        <button class="toolbar-btn" @click="toggleAxes">軸</button>
+      </div>
+
+      <input
+        ref="fileInputRef"
+        type="file"
+        class="hidden-file-input"
+        accept=".dxf,.glb,.gltf"
+        @change="handleFileChangeWrapper"
+      />
+    </main>
+
+    <!-- 開始前彈窗 -->
+    <div v-if="showWelcomeModal" class="modal-overlay">
+      <div class="modal-card">
+        <h1 class="modal-title">CAUR 屋頂都市再生生成系統</h1>
+
+        <p class="modal-text">welcome</p>
+
+        <div class="welcome-hero-block">
+          <img
+            src="/models/首圖.gif"
+            alt="welcome 首圖"
+            class="welcome-hero-image"
+          />
+        </div>
+
+        <div class="modal-inline-row">
+          <label class="modal-label modal-inline-label">使用者名稱</label>
+
+          <input
+            v-model="userName"
+            type="text"
+            class="modal-input modal-inline-input"
+            placeholder="請輸入使用者名稱"
+          />
+
+          <span class="modal-divider">|</span>
+
+          <button class="modal-action-btn modal-inline-btn" @click="openFilePicker">
+            導入地形圖
+          </button>
+
+          <span class="modal-file-text modal-inline-file-text">
+            {{ selectedFileName || '尚未選擇檔案' }}
+          </span>
+        </div>
+
+        <div class="modal-footer">
+          <button
+            class="modal-start-btn"
+            :disabled="!canStart"
+            @click="handleStart"
+          >
+            開始
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { DXFLoader } from 'three-dxf-loader'
+
+/* =========================
+   基本 DOM / 共用狀態
+========================= */
+const containerRef = ref(null)
+const overviewRef = ref(null)
+const fileInputRef = ref(null)
+
+const showWelcomeModal = ref(true)
+const showUpdateModal = ref(false)
+
+const userName = ref('')
+const selectedFile = ref(null)
+const selectedFileName = ref('')
+const currentModelName = ref('')
+
+const pendingFile = ref(null)
+const pendingFileName = ref('')
+
+const showGrid = ref(true)
+const showAxes = ref(true)
+const debugMessage = ref('等待初始化場景')
+
+// 頁面步驟
+const currentStep = ref(1)
+const TOTAL_STEPS = 5
+
+/* =========================
+   第 1 頁資料
+========================= */
+// 第一頁分析資料
+const stepApartmentCount = ref(0)
+const normalBuildingCount = ref(0)
+
+const totalBuildingCount = computed(() => {
+  return stepApartmentCount.value + normalBuildingCount.value
+})
+
+const pieDashArray = computed(() => {
+  const radius = 42
+  const circumference = 2 * Math.PI * radius
+  const total = totalBuildingCount.value
+
+  if (total <= 0) {
+    return `0 ${circumference}`
+  }
+
+  const stepLength = (stepApartmentCount.value / total) * circumference
+  return `${stepLength} ${circumference - stepLength}`
+})
+
+const pieDashOffset = computed(() => {
+  return 0
+})
+
+/* =========================
+   第 2 頁資料
+========================= */
+// 第二頁資料
+const volumeMode = ref('different')
+
+const volumeAType = ref('第一種住宅區 60%')
+const volumeBType = ref('第二種住宅區 120%')
+const fullBlockVolumeType = ref('第一種住宅區 60%')
+
+const blockOptions = [
+  '街廓1',
+  '街廓2',
+  '街廓3',
+  '街廓4',
+  '街廓5',
+  '街廓6',
+  '街廓7',
+  '街廓8',
+  '街廓9',
+  '街廓10',
+  '街廓11',
+  '街廓12'
+]
+
+const selectedBlocksA = ref([])
+
+// 都更模式：容積率 = (建物體積 ÷ 單層高度) ÷ 屋頂水平投影面積
+const FLOOR_HEIGHT = 3
+const renewalFloorAreaRatio = ref(0)
+
+const renewalVolumeText = computed(() => {
+  if (renewalFloorAreaRatio.value <= 0) {
+    return '尚未生成'
+  }
+
+  return `${(renewalFloorAreaRatio.value * 100).toFixed(2)}%`
+})
+
+const resultBars = ref([])
+
+const unselectedBlocks = computed(() => {
+  return blockOptions.filter((block) => !selectedBlocksA.value.includes(block))
+})
+
+const unselectedBlocksText = computed(() => {
+  if (unselectedBlocks.value.length === 0) {
+    return '無'
+  }
+
+  return unselectedBlocks.value.join('、')
+})
+
+/* =========================
+   第 3 頁資料
+========================= */
+// 第三頁資料
+const caAliveCount = ref(0)
+const caDeadCount = ref(0)
+const caRoof1Count = ref(0)
+const caRoof0Count = ref(0)
+
+// 第三頁模式
+const caVolumeMode = ref('different')
+
+const compareItems = ref([])
+const MAX_COMPARE_ITEMS = 3
+
+const volumeModeLabelMap = {
+  different: '街廓不同容積',
+  full: '大街廓容積分配',
+  renewal: '容積轉移分配'
+}
+
+const currentCaModeLabel = computed(() => {
+  return volumeModeLabelMap[caVolumeMode.value] || '尚未選擇'
+})
+
+const isCaVolumeModeMatched = computed(() => {
+  return caVolumeMode.value === volumeMode.value
+})
+
+const currentCaVolumeRateText = computed(() => {
+  if (!isCaVolumeModeMatched.value) {
+    return '尚未選擇'
+  }
+
+  if (!resultBars.value.length) {
+    return '尚未選擇'
+  }
+
+  return resultBars.value.map((item) => item.title).join(' / ')
+})
+
+const isCaVolumeRatePending = computed(() => {
+  return !isCaVolumeModeMatched.value || resultBars.value.length === 0
+})
+
+const caTotalCount = computed(() => {
+  return caAliveCount.value + caDeadCount.value
+})
+
+const caPieDashArray = computed(() => {
+  const radius = 42
+  const circumference = 2 * Math.PI * radius
+  const total = caTotalCount.value
+
+  if (total <= 0) {
+    return `0 ${circumference}`
+  }
+
+  const aliveLength = (caAliveCount.value / total) * circumference
+  return `${aliveLength} ${circumference - aliveLength}`
+})
+
+/* =========================
+   第 4 頁資料
+========================= */
+// 第四頁目前選中的預覽卡片
+const selectedPreviewCompareId = ref('')
+
+// 第四頁排序顏色
+const compareRankColors = ['#111111', '#5f5f5f', '#a0a0a0']
+
+// 評比指標快取
+const compareMetricCache = ref({})
+
+// 第五頁：被提升到最上方的變異項目
+const mutationSelectedItem = ref(null)
+
+// 第五頁：是否已按下確定，顯示右側三張卡片
+const mutationPreviewReady = ref(false)
+
+// 第五頁：右側已選擇的卡片
+
+// 依模式取得對應模型路徑
+function getCompareModelConfig(modeKey) {
+  if (modeKey === 'different') {
+    return {
+      deadPath: '/models/model-ca-dead-FA-AB.glb',
+      alivePath: '/models/model-ca-alive-FA-AB.glb'
+    }
+  }
+
+  if (modeKey === 'full') {
+    return {
+      deadPath: '/models/model-ca-dead-FA-ALL.glb',
+      alivePath: '/models/model-ca-alive-FA-ALL.glb'
+    }
+  }
+
+  return {
+    deadPath: '/models/model-ca-dead-FA-RE.glb',
+    alivePath: '/models/model-ca-alive-FA-RE.glb'
+  }
+}
+
+function getRankColor(index) {
+  return compareRankColors[index] || '#c4c4c4'
+}
+
+function formatPercent(value) {
+  return `${Number(value || 0).toFixed(1)}%`
+}
+
+function formatDensity(value) {
+  return Number(value || 0).toFixed(2)
+}
+
+// 讀取單一模式的評比數值
+async function getCompareMetricsByModeKey(modeKey) {
+  if (compareMetricCache.value[modeKey]) {
+    return compareMetricCache.value[modeKey]
+  }
+
+  const config = getCompareModelConfig(modeKey)
+
+  let deadModel = null
+  let aliveModel = null
+
+  try {
+    deadModel = await loadStaticGlbModel(config.deadPath)
+    aliveModel = await loadStaticGlbModel(config.alivePath)
+
+    const deadCount = countMeshInObject(deadModel)
+    const aliveCount = countMeshInObject(aliveModel)
+    const densityValue = deadCount > 0 ? aliveCount / deadCount : 0
+
+    const result = {
+      deadCount,
+      aliveCount,
+      densityValue,
+      deadPath: config.deadPath,
+      alivePath: config.alivePath
+    }
+
+    compareMetricCache.value = {
+      ...compareMetricCache.value,
+      [modeKey]: result
+    }
+
+    disposeObject(deadModel)
+    disposeObject(aliveModel)
+
+    return result
+  } catch (error) {
+    console.error(error)
+
+    if (deadModel) disposeObject(deadModel)
+    if (aliveModel) disposeObject(aliveModel)
+
+    throw error
+  }
+}
+
+// 用於第四頁排序的完整資料
+const sortedCompareItems = computed(() => {
+  if (!compareItems.value.length) {
+    return []
+  }
+
+  const items = compareItems.value.map((item) => {
+    const metrics = item.metrics || {}
+
+    return {
+      ...item,
+      deadCount: metrics.deadCount || 0,
+      aliveCount: metrics.aliveCount || 0,
+      densityValue: metrics.densityValue || 0
+    }
+  })
+
+  const totalDead = items.reduce((sum, item) => sum + item.deadCount, 0)
+  const totalAlive = items.reduce((sum, item) => sum + item.aliveCount, 0)
+  const totalDensity = items.reduce((sum, item) => sum + item.densityValue, 0)
+
+  const withShare = items.map((item) => {
+    const deadShare = totalDead > 0 ? (item.deadCount / totalDead) * 100 : 0
+    const aliveShare = totalAlive > 0 ? (item.aliveCount / totalAlive) * 100 : 0
+    const densityShare = totalDensity > 0 ? (item.densityValue / totalDensity) * 100 : 0
+    const totalShare = deadShare + aliveShare + densityShare
+
+    return {
+      ...item,
+      deadShare,
+      aliveShare,
+      densityShare,
+      totalShare
+    }
+  })
+
+  return withShare.sort((a, b) => b.totalShare - a.totalShare)
+})
+
+// 第五頁左側原始列表：移除已被拿去做變異的那一筆
+const mutationBaseList = computed(() => {
+  return sortedCompareItems.value
+})
+
+const selectedMutationCardKey = ref('')
+const externalRange = ref(150)
+const externalGenerated = ref(false)
+const heteroStreetConfirmed = ref(false)
+const heteroActivityLength = ref(1000)
+const heteroPathGenerated = ref(false)
+
+const mutationCards = [
+  {
+    key: 'internal',
+    title: '內部變異',
+    image: '/models/內部變異.png',
+    description: 'XXXXX'
+  },
+  {
+    key: 'external',
+    title: '外部變異',
+    image: '/models/外部變異.png',
+    description: 'XXXXX'
+  },
+  {
+    key: 'hetero',
+    title: '異質變異',
+    image: '/models/異質變異.png',
+    description: 'XXXXX'
+  }
+]
+
+const mutationDisplayCards = computed(() => {
+  if (!selectedMutationCardKey.value) {
+    return mutationCards
+  }
+
+  return mutationCards.filter((item) => item.key === selectedMutationCardKey.value)
+})
+
+const mutationInternalDetails = [
+  { modelKey: 'internalGreen', label: '綠化量體' },
+  { modelKey: 'internalServe', label: '綠化服務量體' },
+  { modelKey: 'internalPath', label: '綠化量體動線' }
+]
+
+
+const mutationExternalDetails = [
+  { modelKey: 'externalRoof', label: '受影響的屋頂', unit: '個' },
+  { modelKey: 'externalDead', label: '居住單元', unit: '單位' },
+  { modelKey: 'externalAlive', label: '公領域單元', unit: '單位' },
+  { modelKey: 'externalTcode', label: '梯間 / 管線代碼', unit: '單位' }
+]
+
+
+const heteroSuggestedRangeText = computed(() => {
+  const base = Number(heteroActivityLength.value || 0)
+  return `${Math.max(0, base)} ~ ${Math.max(0, base + 500)}`
+})
+
+// 建立圓餅圖 conic-gradient
+function buildMetricPieStyle(metricKey) {
+  if (!sortedCompareItems.value.length) {
+    return {
+      background: 'conic-gradient(#e6e6e6 0% 100%)'
+    }
+  }
+
+  const total = sortedCompareItems.value.reduce((sum, item) => {
+    return sum + Number(item[metricKey] || 0)
+  }, 0)
+
+  if (total <= 0) {
+    return {
+      background: 'conic-gradient(#e6e6e6 0% 100%)'
+    }
+  }
+
+  let start = 0
+  const segments = sortedCompareItems.value.map((item, index) => {
+    const value = Number(item[metricKey] || 0)
+    const percent = (value / total) * 100
+    const end = start + percent
+    const color = getRankColor(index)
+    const segment = `${color} ${start}% ${end}%`
+    start = end
+    return segment
+  })
+
+  return {
+    background: `conic-gradient(${segments.join(', ')})`
+  }
+}
+
+/* =========================
+   首頁啟動條件
+========================= */
+const canStart = computed(() => {
+  return userName.value.trim() !== '' && !!selectedFile.value
+})
+
+/* =========================
+   模型顯示樣式
+========================= */
+const faModelStyle = {
+  a: {
+    color: '#ff6b6b',
+    opacity: 0.78
+  },
+  b: {
+    color: '#ffae00',
+    opacity: 0.72
+  },
+  all: {
+    color: '#4d7cff',
+    opacity: 0.65
+  },
+  allRe: {
+    color: '#ff7a59',
+    opacity: 0.65
+  }
+}
+
+const caModelStyle = {
+  dead: {
+    color: '#ffffff',
+    opacity: 1
+  },
+  alive: {
+    color: '#a7ffa7',
+    opacity: 0.82
+  },
+  roof1: {
+    color: '#ffb71c',
+    opacity: 0.58
+  },
+  roof0: {
+    color: '#8fd19e',
+    opacity: 0.5
+  },
+  tcode: {
+    color: '#ff8a5b',
+    opacity: 0.78
+  }
+}
+
+/* =========================
+   Three.js 場景變數
+========================= */
+let scene = null
+let camera = null
+let renderer = null
+let controls = null
+let animationId = null
+
+let overviewCamera = null
+let overviewRenderer = null
+
+let gridHelper = null
+let axesHelper = null
+let terrainModel = null
+let generatedBuilding = null
+let generatedBuildingN = null
+let roofAreaModel = null
+
+let faModelA = null
+let faModelB = null
+let faModelAll = null
+let faModelAllRe = null
+
+let caDeadModel = null
+let caAliveModel = null
+let caRoof1Model = null
+let caRoof0Model = null
+let caTcodeModel = null
+
+let sceneReady = false
+
+const GRID_SIZE = 400
+const GRID_DIVISIONS = 40
+
+const initialCameraPosition = new THREE.Vector3(160, 120, 160)
+const initialTargetPosition = new THREE.Vector3(0, 20, 0)
+
+/* =========================
+   共用小工具
+========================= */
+function setDebug(message) {
+  debugMessage.value = message
+  console.log('[CAUR DEBUG]', message)
+}
+
+function formatUnit(value) {
+  return Number(value || 0).toFixed(1)
+}
+
+function countMeshInObject(object) {
+  let count = 0
+
+  object.traverse((child) => {
+    if (child.isMesh) {
+      count += 1
+    }
+  })
+
+  return count
+}
+
+function escapeCsvValue(value) {
+  const text = String(value ?? '')
+  const escaped = text.replace(/"/g, '""')
+  return `"${escaped}"`
+}
+
+function buildCompareCsvContent() {
+  const headers = [
+    '排名',
+    '選擇的底圖',
+    '容積分配',
+    '容積率',
+    '新增居住單元總數',
+    '屋頂綠化面積',
+    '居民平均公共空間密度'
+  ]
+
+  const rows = sortedCompareItems.value.map((item, index) => {
+    return [
+      index + 1,
+      currentModelName.value || '尚未載入',
+      item.textA || '',
+      item.textB || '',
+      item.deadCount || 0,
+      item.aliveCount || 0,
+      formatDensity(item.densityValue)
+    ]
+  })
+
+  const csvLines = [
+    headers.map(escapeCsvValue).join(','),
+    ...rows.map((row) => row.map(escapeCsvValue).join(','))
+  ]
+
+  return '\uFEFF' + csvLines.join('\n')
+}
+
+/* =========================
+   頁面切換
+========================= */
+function goNextStep() {
+  if (currentStep.value < TOTAL_STEPS) {
+    currentStep.value += 1
+  }
+}
+
+function goPrevStep() {
+  if (currentStep.value > 1) {
+    currentStep.value -= 1
+  }
+}
+
+function goToStep4() {
+  currentStep.value = 4
+  setDebug('已返回第四頁評比')
+}
+
+function goToMutationPage() {
+  if (!sortedCompareItems.value.length) {
+    setDebug('目前沒有評比結果，無法進入突變頁')
+    return
+  }
+
+  mutationSelectedItem.value = null
+  mutationPreviewReady.value = false
+  selectedMutationCardKey.value = ''
+
+  currentStep.value = 5
+  setDebug('已進入第五頁突變結果')
+}
+
+function goBackToStep2() {
+  // 關閉 /models/model-ca 這系列模型
+  clearCaModels()
+
+  caAliveCount.value = 0
+  caDeadCount.value = 0
+  caRoof1Count.value = 0
+  caRoof0Count.value = 0
+
+  currentStep.value = 2
+  setDebug('已清除細胞自動機模型，返回第二頁重新選擇容積')
+}
+
+function goSelectMatchedVolume() {
+  // 關閉 /models/model-ca 這系列模型
+  clearCaModels()
+
+  caAliveCount.value = 0
+  caDeadCount.value = 0
+  caRoof1Count.value = 0
+  caRoof0Count.value = 0
+
+  volumeMode.value = caVolumeMode.value
+  currentStep.value = 2
+  setDebug('已清除細胞自動機模型，跳轉至第二頁對應容積設定')
+}
+
+async function addCompareItem() {
+  if (compareItems.value.length >= MAX_COMPARE_ITEMS) {
+    setDebug('評比結果最多只能加入 3 筆')
+    return
+  }
+
+  try {
+    setDebug('正在讀取評比模型數值...')
+
+    const metrics = await getCompareMetricsByModeKey(caVolumeMode.value)
+
+    compareItems.value.push({
+      id: `${Date.now()}-${Math.random()}`,
+      order: compareItems.value.length + 1,
+      textA: currentCaModeLabel.value,
+      textB: currentCaVolumeRateText.value,
+      isPending: isCaVolumeRatePending.value,
+      modeKey: caVolumeMode.value,
+      metrics
+    })
+
+    setDebug(`已加入第 ${compareItems.value.length} 筆評比結果`)
+  } catch (error) {
+    console.error(error)
+    setDebug(`加入評比失敗：${error.message || error}`)
+    alert(`加入評比失敗：${error.message || error}`)
+  }
+}
+
+function removeCompareItem(id) {
+  compareItems.value = compareItems.value
+    .filter((item) => item.id !== id)
+    .map((item, index) => {
+      return {
+        ...item,
+        order: index + 1
+      }
+    })
+
+  if (selectedPreviewCompareId.value === id) {
+    selectedPreviewCompareId.value = ''
+  }
+
+  setDebug('已清除評比結果')
+}
+
+async function loadComparePreviewModelsByModeKey(modeKey) {
+  if (!sceneReady || !scene) return
+
+  clearFaModels()
+  clearCaModels()
+
+  const config = getCompareModelConfig(modeKey)
+
+  try {
+    caDeadModel = await loadStaticGlbModel(config.deadPath)
+    caAliveModel = await loadStaticGlbModel(config.alivePath)
+    caRoof1Model = await loadStaticGlbModel('/models/model-ca-roof1.glb')
+    caTcodeModel = await loadStaticGlbModel('/models/model-ca-tcode.glb')
+
+    applyModelVisualStyle(caDeadModel, caModelStyle.dead)
+    applyModelVisualStyle(caAliveModel, caModelStyle.alive)
+    applyModelVisualStyle(caRoof1Model, caModelStyle.roof1)
+    applyModelVisualStyle(caTcodeModel, caModelStyle.tcode)
+
+//GeneratedBuilding原始建物
+    fitGeneratedBuildingToScene(caDeadModel, {
+      rotationY: 0,
+      offsetX: 0,
+      offsetY: 0,
+      offsetZ: 0,
+      preserveOriginalY: true
+    })
+
+    applyTransformFromReference(caAliveModel, caDeadModel)
+    applyTransformFromReference(caRoof1Model, caDeadModel)
+    applyTransformFromReference(caTcodeModel, caDeadModel)
+
+    scene.add(caDeadModel)
+    scene.add(caAliveModel)
+    scene.add(caRoof1Model)
+    scene.add(caTcodeModel)
+
+    setDebug(`第四頁預覽模型已顯示｜模式：${modeKey}`)
+  } catch (error) {
+    console.error(error)
+    setDebug(`第四頁模型載入失敗：${error.message || error}`)
+    alert(`第四頁模型載入失敗：${error.message || error}`)
+  }
+}
+
+async function selectComparePreview(compareId) {
+  const targetItem = sortedCompareItems.value.find((item) => item.id === compareId)
+  if (!targetItem) return
+
+  selectedPreviewCompareId.value = compareId
+  await loadComparePreviewModelsByModeKey(targetItem.modeKey)
+}
+
+const mutationModelObjects = {}
+const mutationModelCounts = ref({
+  internalGreen: 0,
+  internalServe: 0,
+  internalPath: 0,
+  externalRoof: 0,
+  externalDead: 0,
+  externalAlive: 0,
+  externalTcode: 0,
+  heteroRoof: 0,
+  heteroTcode: 0,
+  heteroRoof1: 0,
+  heteroPatharea: 0,
+  heteroRaps: 0
+})
+
+const mutationModelStyles = ref({
+  internalGreen: { color: '#7ccf7a', opacity: 0.72 },
+  internalServe: { color: '#3e91ff', opacity: 0.68 },
+  internalPath: { color: '#ff8a5b', opacity: 0.8 },
+  externalRoof: { color: '#8adf8a', opacity: 0.55 },
+  externalDead: { color: '#ffffff', opacity: 1 },
+  externalAlive: { color: '#b0ffb4', opacity: 0.78 },
+  externalTcode: { color: '#ff9f6d', opacity: 0.78 },
+  heteroRoof: { color: '#72d672', opacity: 0.6 },
+  heteroTcode: { color: '#ff9a66', opacity: 0.8 },
+  heteroRoof1: { color: '#ffcc4d', opacity: 0.7 },
+  heteroPatharea: { color: '#76b7ff', opacity: 0.68 },
+  heteroRaps: { color: '#ff4d4d', opacity: 0.95 }
+})
+
+function getMutationCount(modelKey) {
+  return mutationModelCounts.value[modelKey] || 0
+}
+
+function clearMutationModels() {
+  Object.keys(mutationModelObjects).forEach((key) => {
+    const obj = mutationModelObjects[key]
+    if (obj) {
+      scene.remove(obj)
+      disposeObject(obj)
+      delete mutationModelObjects[key]
+    }
+  })
+}
+
+function updateMutationModelStyle(modelKey) {
+  const target = mutationModelObjects[modelKey]
+  const style = mutationModelStyles.value[modelKey]
+  if (!target || !style) return
+  applyModelVisualStyle(target, style)
+}
+
+async function loadMutationModels(modelConfigs, clearExisting = true) {
+  clearFaModels()
+  clearCaModels()
+  if (clearExisting) {
+    clearMutationModels()
+  }
+
+  let referenceModel = null
+  const existingKeys = Object.keys(mutationModelObjects)
+  if (existingKeys.length > 0) {
+    referenceModel = mutationModelObjects[existingKeys[0]]
+  }
+
+  for (const config of modelConfigs) {
+    const model = await loadStaticGlbModel(config.path)
+    mutationModelObjects[config.key] = model
+    applyModelVisualStyle(model, mutationModelStyles.value[config.key])
+
+    if (!referenceModel) {
+      fitGeneratedBuildingToScene(model, {
+        rotationY: 0,
+        offsetX: 0,
+        offsetY: 0,
+        offsetZ: 0,
+        preserveOriginalY: true
+      })
+      referenceModel = model
+    } else {
+      applyTransformFromReference(model, referenceModel)
+    }
+
+    scene.add(model)
+    mutationModelCounts.value[config.key] = countMeshInObject(model)
+  }
+}
+
+function promoteMutationItem(item) {
+  mutationSelectedItem.value = item
+  mutationPreviewReady.value = false
+  selectedMutationCardKey.value = ''
+  externalGenerated.value = false
+  heteroStreetConfirmed.value = false
+  heteroPathGenerated.value = false
+  clearMutationModels()
+  setDebug(`已選擇變異項目：${item.textA}`)
+}
+
+function removeMutationItem() {
+  mutationSelectedItem.value = null
+  mutationPreviewReady.value = false
+  selectedMutationCardKey.value = ''
+  externalGenerated.value = false
+  heteroStreetConfirmed.value = false
+  heteroPathGenerated.value = false
+  clearMutationModels()
+  setDebug('已移除變異項目，返回原位')
+}
+
+function confirmMutationSelection() {
+  if (!mutationSelectedItem.value) {
+    setDebug('尚未選擇變異項目')
+    return
+  }
+
+  mutationPreviewReady.value = true
+  selectedMutationCardKey.value = ''
+  setDebug('已確認變異項目，右側顯示三張變異卡片')
+}
+
+async function selectMutationCard(cardKey) {
+  selectedMutationCardKey.value = cardKey
+  externalGenerated.value = false
+  heteroStreetConfirmed.value = false
+  heteroPathGenerated.value = false
+
+  try {
+    if (cardKey === 'internal') {
+      await loadMutationModels([
+        { key: 'internalGreen', path: '/models/model-INVA-AB.glb' },
+        { key: 'internalServe', path: '/models/model-INVA-serve-AB.glb' },
+        { key: 'internalPath', path: '/models/model-INVA-path-AB.glb' }
+      ])
+      setDebug('已載入內部變異模型')
+      return
+    }
+
+    if (cardKey === 'external') {
+      await loadMutationModels([
+      ])
+      setDebug('已選擇外部變異，請設定都更建物與影響範圍')
+      return
+    }
+
+    if (cardKey === 'hetero') {
+      clearFaModels()
+      clearCaModels()
+      clearMutationModels()
+      setDebug('已選擇異質變異，請設定原始街道')
+    }
+  } catch (error) {
+    console.error(error)
+    setDebug(`變異模型載入失敗：${error.message || error}`)
+    alert(`變異模型載入失敗：${error.message || error}`)
+  }
+}
+
+function mockSelectRenewalBuilding() {
+  setDebug('已選擇需都更的建物（目前為互動占位）')
+}
+
+function confirmExternalSelection() {
+  setDebug(`已確認外部變異設定｜影響範圍 ${externalRange.value} 公尺`)
+}
+
+async function generateExternalMutation() {
+  try {
+    await loadMutationModels([
+      { key: 'externalRoof', path: '/models/model-OUTVA-roof-AB.glb' },
+      { key: 'externalDead', path: '/models/model-OUTVA-cadead-AB.glb' },
+      { key: 'externalAlive', path: '/models/model-OUTVA-caalive-AB.glb' },
+      { key: 'externalTcode', path: '/models/model-OUTVA-tcode-AB.glb' }
+    ], false)
+    externalGenerated.value = true
+    setDebug('已生成外部變異都更中繼站模型')
+  } catch (error) {
+    console.error(error)
+    setDebug(`外部變異生成失敗：${error.message || error}`)
+    alert(`外部變異生成失敗：${error.message || error}`)
+  }
+}
+
+function mockSelectStreetLine() {
+  setDebug('已選擇原始街道線段（目前為互動占位）')
+}
+
+async function confirmHeteroStreet() {
+  try {
+    await loadMutationModels([
+      { key: 'heteroRoof', path: '/models/model-EACHVA-roof-AB.glb' },
+      { key: 'heteroTcode', path: '/models/model-EACHVA-tcode-AB.glb' },
+      { key: 'heteroRoof1', path: '/models/model-EACHVA-roof1-AB.glb' },
+      { key: 'heteroPatharea', path: '/models/model-EACHVA-patharea-AB.glb' }
+    ])
+    heteroStreetConfirmed.value = true
+    setDebug('已確認原始街道，並載入異質變異基礎模型')
+  } catch (error) {
+    console.error(error)
+    setDebug(`異質變異基礎模型載入失敗：${error.message || error}`)
+    alert(`異質變異基礎模型載入失敗：${error.message || error}`)
+  }
+}
+
+async function generateHeteroPath() {
+  try {
+    const model = await loadStaticGlbModel('/models/model-EACHVA-RAPS-AB.glb')
+    if (mutationModelObjects.heteroRaps) {
+      scene.remove(mutationModelObjects.heteroRaps)
+      disposeObject(mutationModelObjects.heteroRaps)
+      delete mutationModelObjects.heteroRaps
+    }
+
+    mutationModelObjects.heteroRaps = model
+    applyModelVisualStyle(model, mutationModelStyles.value.heteroRaps)
+
+    const reference = mutationModelObjects.heteroRoof || mutationModelObjects.heteroTcode || mutationModelObjects.heteroRoof1 || mutationModelObjects.heteroPatharea
+    if (reference) {
+      applyTransformFromReference(model, reference)
+    } else {
+      fitGeneratedBuildingToScene(model, {
+        rotationY: 0,
+        offsetX: 0,
+        offsetY: 0,
+        offsetZ: 0,
+        preserveOriginalY: true
+      })
+    }
+
+    scene.add(model)
+    mutationModelCounts.value.heteroRaps = countMeshInObject(model)
+    heteroPathGenerated.value = true
+    setDebug(`已生成異質變異路徑｜活動長度 ${heteroActivityLength.value}`)
+  } catch (error) {
+    console.error(error)
+    setDebug(`異質變異路徑生成失敗：${error.message || error}`)
+    alert(`異質變異路徑生成失敗：${error.message || error}`)
+  }
+}
+
+
+function backToMutationCardSelection() {
+  selectedMutationCardKey.value = ''
+  externalGenerated.value = false
+  heteroStreetConfirmed.value = false
+  heteroPathGenerated.value = false
+  clearMutationModels()
+  setDebug('已回到變異選擇')
+}
+
+async function saveCompareResultCsv() {
+  if (!sortedCompareItems.value.length) {
+    setDebug('沒有評比資料可儲存')
+    return
+  }
+
+  try {
+    const csvContent = buildCompareCsvContent()
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const fileName = `CAUR_評比結果_${Date.now()}.csv`
+
+    // 優先使用可選儲存位置
+    if ('showSaveFilePicker' in window) {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: fileName,
+        types: [
+          {
+            description: 'CSV 檔案',
+            accept: {
+              'text/csv': ['.csv']
+            }
+          }
+        ]
+      })
+
+      const writable = await handle.createWritable()
+      await writable.write(blob)
+      await writable.close()
+
+      setDebug('評比結果 CSV 已儲存')
+      return
+    }
+
+    // 不支援時改用下載
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    setDebug('目前瀏覽器不支援指定儲存位置，已改用下載 CSV')
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      setDebug('已取消儲存 CSV')
+      return
+    }
+
+    console.error(error)
+    setDebug(`CSV 儲存失敗：${error.message || error}`)
+    alert(`CSV 儲存失敗：${error.message || error}`)
+  }
+}
+
+/* =========================
+   檔案操作
+========================= */
+function openFilePicker() {
+  if (!fileInputRef.value) return
+  fileInputRef.value.value = ''
+  fileInputRef.value.click()
+}
+
+function handleInitialFile(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  selectedFile.value = file
+  selectedFileName.value = file.name
+  setDebug(`已選擇檔案：${file.name}`)
+}
+
+function handlePendingFile(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  pendingFile.value = file
+  pendingFileName.value = file.name
+  setDebug(`已選擇更新檔案：${file.name}`)
+}
+
+function handleFileChangeWrapper(event) {
+  if (showWelcomeModal.value) {
+    handleInitialFile(event)
+  } else {
+    handlePendingFile(event)
+  }
+}
+
+function openUpdateModal() {
+  if (showWelcomeModal.value) return
+
+  pendingFile.value = null
+  pendingFileName.value = ''
+  showUpdateModal.value = true
+}
+
+function closeUpdateModal() {
+  pendingFile.value = null
+  pendingFileName.value = ''
+  showUpdateModal.value = false
+}
+
+async function confirmUpdateFile() {
+  if (!pendingFile.value) return
+
+  if (!sceneReady) {
+    setDebug('場景尚未準備完成，無法更新檔案')
+    return
+  }
+
+  await loadModelFromFile(pendingFile.value, { preserveView: true })
+  closeUpdateModal()
+}
+
+function getFileExtension(fileName) {
+  if (!fileName) return ''
+
+  const ext = fileName.split('.').pop()
+  return ext ? ext.toLowerCase().trim() : ''
+}
+
+async function handleStart() {
+  if (!canStart.value) return
+
+  showWelcomeModal.value = false
+  await nextTick()
+
+  if (!sceneReady) {
+    initScene()
+  }
+
+  if (!sceneReady) {
+    setDebug('場景初始化失敗，無法載入模型')
+    return
+  }
+
+  await loadModelFromFile(selectedFile.value, { preserveView: false })
+}
+
+/* =========================
+   場景初始化
+========================= */
+function initScene() {
+  if (sceneReady) {
+    setDebug('場景已存在')
+    return
+  }
+
+  const container = containerRef.value
+  if (!container) {
+    setDebug('containerRef 為空，場景建立失敗')
+    return
+  }
+
+  scene = new THREE.Scene()
+  scene.background = new THREE.Color(0xf5f5f5)
+
+  const width = Math.max(container.clientWidth, 1)
+  const height = Math.max(container.clientHeight, 1)
+
+  camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 5000)
+  camera.position.copy(initialCameraPosition)
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  renderer.setSize(width, height)
+  renderer.outputColorSpace = THREE.SRGBColorSpace
+
+  container.innerHTML = ''
+  container.appendChild(renderer.domElement)
+
+  controls = new OrbitControls(camera, renderer.domElement)
+  controls.enableDamping = true
+  controls.target.copy(initialTargetPosition)
+  controls.update()
+
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.35)
+  scene.add(ambientLight)
+
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.1)
+  directionalLight.position.set(120, 160, 100)
+  scene.add(directionalLight)
+
+  gridHelper = new THREE.GridHelper(GRID_SIZE, GRID_DIVISIONS, 0x999999, 0xcccccc)
+  gridHelper.position.set(0, 0, 0)
+  scene.add(gridHelper)
+
+  axesHelper = new THREE.AxesHelper(80)
+  scene.add(axesHelper)
+
+  initOverviewScene()
+
+  sceneReady = true
+  animate()
+  window.addEventListener('resize', onWindowResize)
+
+  setDebug('three 場景初始化完成')
+}
+
+function initOverviewScene() {
+  const overviewContainer = overviewRef.value
+  if (!overviewContainer) return
+
+  const size = Math.max(overviewContainer.clientWidth, 1)
+  const halfRange = GRID_SIZE * 0.7
+
+  overviewCamera = new THREE.OrthographicCamera(
+    -halfRange,
+    halfRange,
+    halfRange,
+    -halfRange,
+    0.1,
+    5000
+  )
+
+  overviewCamera.position.set(0, 600, 0)
+  overviewCamera.up.set(0, 0, -1)
+  overviewCamera.lookAt(0, 0, 0)
+
+  overviewRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  overviewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  overviewRenderer.setSize(size, size)
+  overviewRenderer.outputColorSpace = THREE.SRGBColorSpace
+
+  overviewContainer.innerHTML = ''
+  overviewContainer.appendChild(overviewRenderer.domElement)
+}
+
+function animate() {
+  animationId = requestAnimationFrame(animate)
+
+  if (controls) {
+    controls.update()
+  }
+
+  if (renderer && scene && camera) {
+    renderer.render(scene, camera)
+  }
+
+  if (overviewRenderer && scene && overviewCamera) {
+    overviewRenderer.render(scene, overviewCamera)
+  }
+}
+
+function onWindowResize() {
+  const container = containerRef.value
+  if (!container || !camera || !renderer) return
+
+  const width = Math.max(container.clientWidth, 1)
+  const height = Math.max(container.clientHeight, 1)
+
+  camera.aspect = width / height
+  camera.updateProjectionMatrix()
+  renderer.setSize(width, height)
+
+  const overviewContainer = overviewRef.value
+  if (overviewContainer && overviewRenderer && overviewCamera) {
+    const overviewSize = Math.max(overviewContainer.clientWidth, 1)
+    overviewRenderer.setSize(overviewSize, overviewSize)
+    overviewCamera.updateProjectionMatrix()
+  }
+}
+
+/* =========================
+   模型載入
+========================= */
+async function loadModelFromFile(file, options = { preserveView: true }) {
+  if (!file) {
+    setDebug('未選擇檔案')
+    return
+  }
+
+  if (!sceneReady || !scene) {
+    setDebug('scene 尚未建立')
+    return
+  }
+
+  const { preserveView = true } = options
+  const extension = getFileExtension(file.name)
+
+  console.log('載入檔案：', file.name)
+  console.log('副檔名：', extension)
+  setDebug(`開始載入：${file.name}`)
+
+  if (terrainModel) {
+    scene.remove(terrainModel)
+    disposeObject(terrainModel)
+    terrainModel = null
+  }
+
+  if (generatedBuilding) {
+    scene.remove(generatedBuilding)
+    disposeObject(generatedBuilding)
+    generatedBuilding = null
+  }
+
+  if (generatedBuildingN) {
+    scene.remove(generatedBuildingN)
+    disposeObject(generatedBuildingN)
+    generatedBuildingN = null
+  }
+
+  if (roofAreaModel) {
+    scene.remove(roofAreaModel)
+    disposeObject(roofAreaModel)
+    roofAreaModel = null
+  }
+
+  clearFaModels()
+  clearCaModels()
+  clearMutationModels()
+  resultBars.value = []
+
+  caAliveCount.value = 0
+  caDeadCount.value = 0
+  caRoof1Count.value = 0
+  caRoof0Count.value = 0
+
+  stepApartmentCount.value = 0
+  normalBuildingCount.value = 0
+  compareItems.value = []
+  selectedPreviewCompareId.value = ''
+  compareMetricCache.value = {}
+  renewalFloorAreaRatio.value = 0
+  mutationSelectedItem.value = null
+  mutationPreviewReady.value = false
+  selectedMutationCardKey.value = ''
+
+  try {
+    if (extension === 'glb' || extension === 'gltf') {
+      terrainModel = await loadGlbFile(file)
+    } else if (extension === 'dxf') {
+      terrainModel = await loadDxfFile(file)
+
+      // DXF 左右水平反轉
+      terrainModel.scale.x *= -1
+      terrainModel.updateMatrixWorld(true)
+    } else {
+      throw new Error(`不支援的檔案格式：.${extension}`)
+    }
+
+    if (!terrainModel) {
+      throw new Error('模型物件為空')
+    }
+
+      currentModelName.value = file.name
+
+      fitModelToGridBoundary(terrainModel)
+
+      // DXF 左右水平反轉
+      if (extension === 'dxf') {
+        terrainModel.scale.x *= -1
+        terrainModel.updateMatrixWorld(true)
+      }
+
+      scene.add(terrainModel)
+      focusCameraOnObject(terrainModel)
+
+    if (!preserveView) {
+      resetView()
+      focusCameraOnObject(terrainModel)
+    }
+
+    setDebug(`載入完成：${file.name}`)
+  } catch (error) {
+    console.error('模型載入失敗:', error)
+    setDebug(`模型載入失敗：${error.message || error}`)
+    alert(`模型載入失敗：${error.message || error}`)
+  }
+}
+
+function loadGlbFile(file) {
+  return new Promise((resolve, reject) => {
+    const loader = new GLTFLoader()
+    const fileUrl = URL.createObjectURL(file)
+
+    loader.load(
+      fileUrl,
+      (gltf) => {
+        const root = gltf.scene
+
+        root.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true
+            child.receiveShadow = true
+          }
+        })
+
+        URL.revokeObjectURL(fileUrl)
+        resolve(root)
+      },
+      undefined,
+      (error) => {
+        URL.revokeObjectURL(fileUrl)
+        reject(error)
+      }
+    )
+  })
+}
+
+function loadStaticGlbModel(path) {
+  return new Promise((resolve, reject) => {
+    const loader = new GLTFLoader()
+
+    loader.load(
+      path,
+      (gltf) => resolve(gltf.scene),
+      undefined,
+      async (error) => {
+        console.error('GLB 載入失敗：', path, error)
+
+        try {
+          const response = await fetch(path)
+          const text = await response.text()
+
+          if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+            reject(new Error(`模型路徑錯誤或檔案不存在：${path}`))
+            return
+          }
+        } catch (fetchError) {
+          console.error(fetchError)
+        }
+
+        reject(error)
+      }
+    )
+  })
+}
+
+async function loadDxfFile(file) {
+  return new Promise((resolve, reject) => {
+    const loader = new DXFLoader()
+    const fileUrl = URL.createObjectURL(file)
+
+    try {
+      loader.setConsumeUnits?.(true)
+      loader.setDefaultColor?.(0x111111)
+      loader.setEnableLayer?.(true)
+    } catch (configError) {
+      console.warn('DXF loader 設定略過：', configError)
+    }
+
+    loader.load(
+      fileUrl,
+      (data) => {
+        try {
+          console.log('DXF 載入結果：', data)
+
+          const root = data?.entity || data?.entities || data
+
+          if (!root) {
+            URL.revokeObjectURL(fileUrl)
+            reject(new Error('DXF 載入成功，但沒有可顯示的 entity'))
+            return
+          }
+
+          root.name = 'DXF_ROOT'
+          root.rotation.x = -Math.PI / 2
+          root.rotation.y = Math.PI
+          root.updateMatrixWorld(true)
+
+          const rawBox = new THREE.Box3().setFromObject(root)
+          const rawSize = rawBox.getSize(new THREE.Vector3())
+
+          if (rawSize.length() === 0) {
+            URL.revokeObjectURL(fileUrl)
+            reject(new Error('DXF 有載入，但尺寸為 0，可能是空檔或圖層內容不支援'))
+            return
+          }
+
+          URL.revokeObjectURL(fileUrl)
+          resolve(root)
+        } catch (innerError) {
+          URL.revokeObjectURL(fileUrl)
+          reject(innerError)
+        }
+      },
+      undefined,
+      (error) => {
+        URL.revokeObjectURL(fileUrl)
+        console.error('DXF 載入失敗：', error)
+        reject(new Error('DXF 格式不支援，請將檔案另存為 AutoCAD R2000 DXF 後再試一次'))
+      }
+    )
+  })
+}
+
+/* =========================
+   第 1 頁功能
+========================= */
+async function insertGeneratedBuilding() {
+  if (!sceneReady || !scene) {
+    setDebug('場景尚未準備完成')
+    return
+  }
+
+  if (!terrainModel) {
+    setDebug('請先載入地形圖')
+    return
+  }
+
+  try {
+    if (generatedBuilding) {
+      scene.remove(generatedBuilding)
+      disposeObject(generatedBuilding)
+      generatedBuilding = null
+    }
+
+    if (generatedBuildingN) {
+      scene.remove(generatedBuildingN)
+      disposeObject(generatedBuildingN)
+      generatedBuildingN = null
+    }
+
+    const loader = new GLTFLoader()
+
+    const gltfMain = await new Promise((resolve, reject) => {
+      loader.load(
+        '/models/model-arch.glb',
+        (data) => resolve(data),
+        undefined,
+        (error) => reject(error)
+      )
+    })
+
+    const gltfNormal = await new Promise((resolve, reject) => {
+      loader.load(
+        '/models/model-arch-n.glb',
+        (data) => resolve(data),
+        undefined,
+        (error) => reject(error)
+      )
+    })
+
+    // 兩個模型不同顏色
+const buildingStepColor = ' #111111' // generated-building-step
+const buildingNormalColor ='#bdbdbd'  // generated-building-normal
+const buildingNormalOpacity = 0.75
+const buildingStepOpacity =1
+
+generatedBuilding = gltfMain.scene
+generatedBuilding.name = 'generated-building-step'
+
+generatedBuilding.traverse((child) => {
+  if (child.isMesh) {
+    child.castShadow = true
+    child.receiveShadow = true
+
+    child.material = new THREE.MeshStandardMaterial({
+      color: buildingStepColor,
+      transparent: true,
+      opacity: buildingStepOpacity
+    })
+  }
+})
+
+generatedBuildingN = gltfNormal.scene
+generatedBuildingN.name = 'generated-building-normal'
+
+generatedBuildingN.traverse((child) => {
+  if (child.isMesh) {
+    child.castShadow = true
+    child.receiveShadow = true
+
+    child.material = new THREE.MeshStandardMaterial({
+      color: buildingNormalColor,
+      transparent: true,
+      opacity: buildingNormalOpacity
+    })
+  }
+})
+    fitGeneratedBuildingToScene(generatedBuilding, {
+      rotationY: 0,
+      offsetX: 0,
+      offsetY: 0,
+      offsetZ: 0
+    })
+
+    fitGeneratedBuildingToScene(generatedBuildingN, {
+      rotationY: 0,
+      offsetX: 0,
+      offsetY: 0,
+      offsetZ: 0
+    })
+
+    scene.add(generatedBuilding)
+    scene.add(generatedBuildingN)
+
+    stepApartmentCount.value = countMeshInObject(generatedBuilding)
+    normalBuildingCount.value = countMeshInObject(generatedBuildingN)
+
+    // 更新第二頁容積轉移分配
+    updateRenewalFloorAreaRatio()
+
+    setDebug(`已置入 model-arch.glb 與 model-arch-n.glb｜容積率：${renewalVolumeText.value}`)
+  } catch (error) {
+    console.error(error)
+    setDebug('建物生成失敗')
+    alert(`建物生成失敗：${error.message || error}`)
+  }
+}
+
+async function insertRoofArea() {
+  if (!sceneReady || !scene) {
+    setDebug('場景尚未準備完成')
+    return
+  }
+
+  if (!terrainModel) {
+    setDebug('請先載入地形圖')
+    return
+  }
+
+  try {
+    if (roofAreaModel) {
+      scene.remove(roofAreaModel)
+      disposeObject(roofAreaModel)
+      roofAreaModel = null
+    }
+
+    const loader = new GLTFLoader()
+
+    const gltfRoofArea = await new Promise((resolve, reject) => {
+      loader.load(
+        '/models/model-roofarea.glb',
+        (data) => resolve(data),
+        undefined,
+        (error) => reject(error)
+      )
+    })
+
+    roofAreaModel = gltfRoofArea.scene
+    roofAreaModel.name = 'generated-roof-area'
+
+    roofAreaModel.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true
+        child.receiveShadow = true
+
+        child.material = new THREE.MeshStandardMaterial({
+          color: '#ff684d',
+          transparent: true,
+          opacity: 0.5
+        })
+      }
+    })
+
+    fitGeneratedBuildingToScene(roofAreaModel, {
+      rotationY: 0,
+      offsetX: 0,
+      offsetY: 0,
+      offsetZ: 0,
+      preserveOriginalY: true
+    })
+
+    scene.add(roofAreaModel)
+
+    // 更新第二頁容積轉移分配
+    updateRenewalFloorAreaRatio()
+
+    setDebug(`已置入 model-roofarea.glb｜容積率：${renewalVolumeText.value}`)
+  } catch (error) {
+    console.error(error)
+    setDebug('屋頂利用範圍生成失敗')
+    alert(`屋頂利用範圍生成失敗：${error.message || error}`)
+  }
+}
+
+/* =========================
+   第 2 / 3 頁共用 FA 模型功能
+========================= */
+function clearFaModels() {
+  if (faModelA) {
+    scene.remove(faModelA)
+    disposeObject(faModelA)
+    faModelA = null
+  }
+
+  if (faModelB) {
+    scene.remove(faModelB)
+    disposeObject(faModelB)
+    faModelB = null
+  }
+
+  if (faModelAll) {
+    scene.remove(faModelAll)
+    disposeObject(faModelAll)
+    faModelAll = null
+  }
+
+  if (faModelAllRe) {
+    scene.remove(faModelAllRe)
+    disposeObject(faModelAllRe)
+    faModelAllRe = null
+  }
+}
+
+function applyModelVisualStyle(model, styleConfig) {
+  if (!model || !styleConfig) return
+
+  model.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true
+      child.receiveShadow = true
+
+      child.material = new THREE.MeshStandardMaterial({
+        color: styleConfig.color,
+        transparent: true,
+        opacity: styleConfig.opacity
+      })
+    }
+  })
+}
+
+function signedVolumeOfTriangle(p1, p2, p3) {
+  return p1.dot(p2.clone().cross(p3)) / 6
+}
+
+function computeMeshVolume(mesh) {
+  const geometry = mesh.geometry
+  if (!geometry || !geometry.attributes?.position) return 0
+
+  const pos = geometry.attributes.position
+  const index = geometry.index
+  let volume = 0
+
+  mesh.updateWorldMatrix(true, false)
+  const matrix = mesh.matrixWorld
+
+  const p1 = new THREE.Vector3()
+  const p2 = new THREE.Vector3()
+  const p3 = new THREE.Vector3()
+
+  if (index) {
+    for (let i = 0; i < index.count; i += 3) {
+      const a = index.getX(i)
+      const b = index.getX(i + 1)
+      const c = index.getX(i + 2)
+
+      p1.fromBufferAttribute(pos, a).applyMatrix4(matrix)
+      p2.fromBufferAttribute(pos, b).applyMatrix4(matrix)
+      p3.fromBufferAttribute(pos, c).applyMatrix4(matrix)
+
+      volume += signedVolumeOfTriangle(p1, p2, p3)
+    }
+  } else {
+    for (let i = 0; i < pos.count; i += 3) {
+      p1.fromBufferAttribute(pos, i).applyMatrix4(matrix)
+      p2.fromBufferAttribute(pos, i + 1).applyMatrix4(matrix)
+      p3.fromBufferAttribute(pos, i + 2).applyMatrix4(matrix)
+
+      volume += signedVolumeOfTriangle(p1, p2, p3)
+    }
+  }
+
+  return Math.abs(volume)
+}
+
+function computeObjectVolume(object) {
+  let totalVolume = 0
+
+  object.updateMatrixWorld(true)
+
+  object.traverse((child) => {
+    if (child.isMesh) {
+      totalVolume += computeMeshVolume(child)
+    }
+  })
+
+  return totalVolume
+}
+
+// 計算三角形在 XZ 平面的投影面積
+function triangleAreaXZ(p1, p2, p3) {
+  const ax = p2.x - p1.x
+  const az = p2.z - p1.z
+  const bx = p3.x - p1.x
+  const bz = p3.z - p1.z
+
+  return Math.abs((ax * bz - az * bx) * 0.5)
+}
+
+// 計算單一 mesh 在 XZ 平面的投影面積
+function computeMeshProjectedAreaXZ(mesh) {
+  const geometry = mesh.geometry
+  if (!geometry || !geometry.attributes?.position) return 0
+
+  const pos = geometry.attributes.position
+  const index = geometry.index
+  let area = 0
+
+  mesh.updateWorldMatrix(true, false)
+  const matrix = mesh.matrixWorld
+
+  const p1 = new THREE.Vector3()
+  const p2 = new THREE.Vector3()
+  const p3 = new THREE.Vector3()
+
+  if (index) {
+    for (let i = 0; i < index.count; i += 3) {
+      const a = index.getX(i)
+      const b = index.getX(i + 1)
+      const c = index.getX(i + 2)
+
+      p1.fromBufferAttribute(pos, a).applyMatrix4(matrix)
+      p2.fromBufferAttribute(pos, b).applyMatrix4(matrix)
+      p3.fromBufferAttribute(pos, c).applyMatrix4(matrix)
+
+      area += triangleAreaXZ(p1, p2, p3)
+    }
+  } else {
+    for (let i = 0; i < pos.count; i += 3) {
+      p1.fromBufferAttribute(pos, i).applyMatrix4(matrix)
+      p2.fromBufferAttribute(pos, i + 1).applyMatrix4(matrix)
+      p3.fromBufferAttribute(pos, i + 2).applyMatrix4(matrix)
+
+      area += triangleAreaXZ(p1, p2, p3)
+    }
+  }
+
+  return area
+}
+
+// 計算整個物件在 XZ 平面的投影面積
+function computeObjectProjectedAreaXZ(object) {
+  let totalArea = 0
+
+  object.updateMatrixWorld(true)
+
+  object.traverse((child) => {
+    if (child.isMesh) {
+      totalArea += computeMeshProjectedAreaXZ(child)
+    }
+  })
+
+  return totalArea
+}
+
+// 更新第二頁容積轉移分配
+function updateRenewalFloorAreaRatio() {
+  if (!generatedBuilding || !roofAreaModel) {
+    renewalFloorAreaRatio.value = 0
+    return
+  }
+
+  const archVolume = computeObjectVolume(generatedBuilding)
+  const totalFloorArea = archVolume / FLOOR_HEIGHT
+  const roofProjectedArea = computeObjectProjectedAreaXZ(roofAreaModel)
+
+  renewalFloorAreaRatio.value =
+    roofProjectedArea > 0 ? totalFloorArea / roofProjectedArea : 0
+}
+
+function applyTransformFromReference(model, referenceModel, extraOffset = {}) {
+  if (!model || !referenceModel) return
+
+  const {
+    offsetX = 0,
+    offsetY = 0,
+    offsetZ = 0
+  } = extraOffset
+
+  model.scale.copy(referenceModel.scale)
+  model.rotation.copy(referenceModel.rotation)
+  model.position.copy(referenceModel.position)
+
+  model.position.x += offsetX
+  model.position.y += offsetY
+  model.position.z += offsetZ
+
+  model.updateMatrixWorld(true)
+}
+
+/* =========================
+   第 2 頁功能
+========================= */
+async function simulateRoofVolume() {
+  if (!sceneReady || !scene) {
+    setDebug('場景尚未準備完成')
+    return
+  }
+
+  if (!terrainModel) {
+    setDebug('請先載入地形圖')
+    return
+  }
+
+  try {
+    clearFaModels()
+    resultBars.value = []
+
+    if (volumeMode.value === 'different') {
+      faModelA = await loadStaticGlbModel('/models/model-FA-A.glb')
+      faModelB = await loadStaticGlbModel('/models/model-FA-B.glb')
+
+      applyModelVisualStyle(faModelA, faModelStyle.a)
+      applyModelVisualStyle(faModelB, faModelStyle.b)
+
+      // B 作為基準先對齊
+      fitGeneratedBuildingToScene(faModelB, {
+        rotationY: 0,
+        offsetX: 0,
+        offsetY: 0,
+        offsetZ:0,
+        preserveOriginalY: true
+      })
+
+      // A 直接沿用 B 的 transform
+      applyTransformFromReference(faModelA, faModelB)
+
+      scene.add(faModelA)
+      scene.add(faModelB)
+
+      const volumeA = computeObjectVolume(faModelA)
+      const volumeB = computeObjectVolume(faModelB)
+
+      const unitA = volumeA / 9
+      const unitB = volumeB / 9
+      const maxUnits = Math.max(unitA, unitB, 1)
+
+      resultBars.value = [
+        {
+          key: 'a',
+          title: `容積A｜${volumeAType.value}`,
+          units: unitA,
+          color: faModelStyle.a.color,
+          height: (unitA / maxUnits) * 100
+        },
+        {
+          key: 'b',
+          title: `容積B｜${volumeBType.value}`,
+          units: unitB,
+          color: faModelStyle.b.color,
+          height: (unitB / maxUnits) * 100
+        }
+      ]
+
+      setDebug('屋頂空間量體模擬完成｜模式：街廓不同容積')
+      return
+    }
+
+    if (volumeMode.value === 'full') {
+      faModelAll = await loadStaticGlbModel('/models/model-FA-ALL.glb')
+
+      applyModelVisualStyle(faModelAll, faModelStyle.all)
+
+      fitGeneratedBuildingToScene(faModelAll, {
+        rotationY: 0,
+        offsetX:0,
+        offsetY: 0,
+        offsetZ: 0,
+        preserveOriginalY: true
+      })
+
+      scene.add(faModelAll)
+
+      const volumeAll = computeObjectVolume(faModelAll)
+      const unitAll = volumeAll / 9
+
+      resultBars.value = [
+        {
+          key: 'all',
+          title: fullBlockVolumeType.value,
+          units: unitAll,
+          color: faModelStyle.all.color,
+          height: 100
+        }
+      ]
+
+      setDebug('屋頂空間量體模擬完成｜模式：大街廓容積分配')
+      return
+    }
+
+    faModelAllRe = await loadStaticGlbModel('/models/model-FA-ALL-RE.glb')
+
+    applyModelVisualStyle(faModelAllRe, faModelStyle.allRe)
+
+    fitGeneratedBuildingToScene(faModelAllRe, {
+      rotationY: 0,
+      offsetX: 0,
+      offsetY: 0,
+      offsetZ: 0,
+      preserveOriginalY: true
+    })
+
+    scene.add(faModelAllRe)
+
+    const volumeAllRe = computeObjectVolume(faModelAllRe)
+    const unitAllRe = volumeAllRe / 9
+
+    resultBars.value = [
+      {
+        key: 'allRe',
+        title: `容積率 ${renewalVolumeText.value}`,
+        units: unitAllRe,
+        color: faModelStyle.allRe.color,
+        height: 100
+      }
+    ]
+
+    setDebug('屋頂空間量體模擬完成｜模式：容積轉移分配')
+  } catch (error) {
+    console.error(error)
+    setDebug(`屋頂空間量體模擬失敗：${error.message || error}`)
+    alert(`屋頂空間量體模擬失敗：${error.message || error}`)
+  }
+}
+
+/* =========================
+   第 3 頁功能
+========================= */
+function clearCaModels() {
+  if (caDeadModel) {
+    scene.remove(caDeadModel)
+    disposeObject(caDeadModel)
+    caDeadModel = null
+  }
+
+  if (caAliveModel) {
+    scene.remove(caAliveModel)
+    disposeObject(caAliveModel)
+    caAliveModel = null
+  }
+
+  if (caRoof1Model) {
+    scene.remove(caRoof1Model)
+    disposeObject(caRoof1Model)
+    caRoof1Model = null
+  }
+
+  if (caRoof0Model) {
+    scene.remove(caRoof0Model)
+    disposeObject(caRoof0Model)
+    caRoof0Model = null
+  }
+
+  if (caTcodeModel) {
+    scene.remove(caTcodeModel)
+    disposeObject(caTcodeModel)
+    caTcodeModel = null
+  }
+}
+
+async function generateCaSpace() {
+  if (!sceneReady || !scene) {
+    setDebug('場景尚未準備完成')
+    return
+  }
+
+  if (!terrainModel) {
+    setDebug('請先載入地形圖')
+    return
+  }
+
+  try {
+    // 按下生成量體時，先關閉所有 FA 模型
+    clearFaModels()
+
+    // 先清掉上一組 CA 模型
+    clearCaModels()
+
+    // 先記住上一次的 roof0 數量，避免失敗時被洗成 0
+    const previousRoof0Count = caRoof0Count.value
+
+    caAliveCount.value = 0
+    caDeadCount.value = 0
+    caRoof1Count.value = 0
+    caRoof0Count.value = 0
+
+    // 依第三頁模式載入不同 CA 模型
+    if (caVolumeMode.value === 'different') {
+      caDeadModel = await loadStaticGlbModel('/models/model-ca-dead-FA-AB.glb')
+      caAliveModel = await loadStaticGlbModel('/models/model-ca-alive-FA-AB.glb')
+    } else if (caVolumeMode.value === 'full') {
+      caDeadModel = await loadStaticGlbModel('/models/model-ca-dead-FA-ALL.glb')
+      caAliveModel = await loadStaticGlbModel('/models/model-ca-alive-FA-ALL.glb')
+    } else {
+      caDeadModel = await loadStaticGlbModel('/models/model-ca-dead-FA-RE.glb')
+      caAliveModel = await loadStaticGlbModel('/models/model-ca-alive-FA-RE.glb')
+    }
+
+    // 不論哪個模式都要存在
+    caRoof1Model = await loadStaticGlbModel('/models/model-ca-roof1.glb')
+    caTcodeModel = await loadStaticGlbModel('/models/model-ca-tcode.glb')
+
+    // model-ca-roof0.glb 只做數量統計，不顯示在場景
+    try {
+      caRoof0Model = await loadStaticGlbModel('/models/model-ca-roof0.glb')
+    } catch (error) {
+      console.warn('model-ca-roof0.glb 未載入', error)
+      caRoof0Model = null
+    }
+
+    // 模型檔案可自行設定顏色及透明度
+    applyModelVisualStyle(caDeadModel, caModelStyle.dead)
+    applyModelVisualStyle(caAliveModel, caModelStyle.alive)
+    applyModelVisualStyle(caRoof1Model, caModelStyle.roof1)
+    applyModelVisualStyle(caTcodeModel, caModelStyle.tcode)
+
+    fitGeneratedBuildingToScene(caDeadModel, {
+      rotationY: 0,
+      offsetX: 0,
+      offsetY: 0,
+      offsetZ: 0,
+      preserveOriginalY: true
+    })
+
+    applyTransformFromReference(caAliveModel, caDeadModel)
+    applyTransformFromReference(caRoof1Model, caDeadModel)
+    applyTransformFromReference(caTcodeModel, caDeadModel)
+
+    scene.add(caDeadModel)
+    scene.add(caAliveModel)
+    scene.add(caRoof1Model)
+    scene.add(caTcodeModel)
+
+    // 統計 mesh 數量
+    caDeadCount.value = countMeshInObject(caDeadModel)
+    caAliveCount.value = countMeshInObject(caAliveModel)
+    caRoof1Count.value = countMeshInObject(caRoof1Model)
+
+    // roof0 不顯示，但照樣算數量；若失敗就保留舊值
+    if (caRoof0Model) {
+      caRoof0Count.value = countMeshInObject(caRoof0Model)
+    } else {
+      caRoof0Count.value = previousRoof0Count
+    }
+
+    setDebug(`已生成細胞自動機再生空間｜模式：${caVolumeMode.value}`)
+  } catch (error) {
+    console.error(error)
+    setDebug(`細胞自動機生成失敗：${error.message || error}`)
+    alert(`細胞自動機生成失敗：${error.message || error}`)
+  }
+}
+
+/* =========================
+   模型對位 / 視角 / 顯示控制
+========================= */
+function fitGeneratedBuildingToScene(model, options = {}) {
+  const {
+    rotationY = 0,
+    offsetX = 0,
+    offsetY = 0,
+    offsetZ = 0,
+    preserveOriginalY = false
+  } = options
+
+  const originalY = model.position.y
+
+  model.position.set(0, preserveOriginalY ? originalY : 0, 0)
+  model.scale.set(1, 1, 1)
+  model.rotation.set(0, rotationY, 0)
+  model.updateMatrixWorld(true)
+
+  const buildingBox = new THREE.Box3().setFromObject(model)
+  const buildingSize = buildingBox.getSize(new THREE.Vector3())
+
+  if (buildingSize.length() === 0) {
+    console.warn('GLB 尺寸為 0，無法對齊')
+    return
+  }
+
+  let terrainCenter = new THREE.Vector3(0, 0, 0)
+  let terrainSize = new THREE.Vector3(GRID_SIZE * 0.92, 0, GRID_SIZE * 0.92)
+  let terrainMinY = 0
+
+  if (terrainModel) {
+    const terrainBox = new THREE.Box3().setFromObject(terrainModel)
+    const currentTerrainSize = terrainBox.getSize(new THREE.Vector3())
+
+    if (currentTerrainSize.length() > 0) {
+      terrainCenter = terrainBox.getCenter(new THREE.Vector3())
+      terrainSize = currentTerrainSize
+      terrainMinY = terrainBox.min.y
+    }
+  }
+
+  const scaleX = terrainSize.x / Math.max(buildingSize.x, 1)
+  const scaleZ = terrainSize.z / Math.max(buildingSize.z, 1)
+  const scale = Math.min(scaleX, scaleZ)
+
+  model.scale.setScalar(scale)
+  model.updateMatrixWorld(true)
+
+  const scaledBox = new THREE.Box3().setFromObject(model)
+  const scaledCenter = scaledBox.getCenter(new THREE.Vector3())
+
+  model.position.x += terrainCenter.x - scaledCenter.x
+  model.position.z += terrainCenter.z - scaledCenter.z
+  model.updateMatrixWorld(true)
+
+  if (!preserveOriginalY) {
+    const alignedBox = new THREE.Box3().setFromObject(model)
+    model.position.y += terrainMinY - alignedBox.min.y
+    model.updateMatrixWorld(true)
+  }
+
+  model.position.x += offsetX
+  model.position.y += offsetY
+  model.position.z += offsetZ
+  model.updateMatrixWorld(true)
+}
+
+function fitModelToGridBoundary(model) {
+  model.position.set(0, 0, 0)
+  model.scale.set(1, 1, 1)
+  model.updateMatrixWorld(true)
+
+  const rawBox = new THREE.Box3().setFromObject(model)
+  const rawSize = rawBox.getSize(new THREE.Vector3())
+
+  if (rawSize.length() === 0) {
+    setDebug('模型尺寸為 0，無法縮放')
+    return
+  }
+
+  const fitRatio = 0.92
+  const targetFootprint = GRID_SIZE * fitRatio
+
+  const modelWidth = rawSize.x
+  const modelDepth = rawSize.z
+  const horizontalMax = Math.max(modelWidth, modelDepth, 1)
+
+  const scale = targetFootprint / horizontalMax
+  model.scale.setScalar(scale)
+  model.updateMatrixWorld(true)
+
+  const box = new THREE.Box3().setFromObject(model)
+
+  const bottomCenterX = (box.min.x + box.max.x) * 0.5
+  const bottomCenterY = box.min.y
+  const bottomCenterZ = (box.min.z + box.max.z) * 0.5
+
+  model.position.x -= bottomCenterX
+  model.position.y -= bottomCenterY
+  model.position.z -= bottomCenterZ
+  model.updateMatrixWorld(true)
+}
+
+function focusCameraOnObject(object) {
+  if (!camera || !controls || !object) return
+
+  const box = new THREE.Box3().setFromObject(object)
+  const size = box.getSize(new THREE.Vector3())
+  const center = box.getCenter(new THREE.Vector3())
+
+  if (size.length() === 0) {
+    setDebug('模型尺寸為 0，無法對焦')
+    return
+  }
+
+  const maxDim = Math.max(size.x, size.y, size.z)
+  const fov = camera.fov * (Math.PI / 180)
+  let distance = maxDim / (2 * Math.tan(fov / 2))
+
+  distance *= 1.8
+
+  const direction = new THREE.Vector3(1, 0.75, 1).normalize()
+
+  camera.position.copy(center.clone().add(direction.multiplyScalar(distance)))
+  controls.target.copy(center)
+  camera.near = Math.max(0.1, distance / 1000)
+  camera.far = Math.max(5000, distance * 20)
+  camera.updateProjectionMatrix()
+  controls.update()
+}
+
+function resetView() {
+  if (!camera || !controls) return
+
+  camera.position.copy(initialCameraPosition)
+  controls.target.copy(initialTargetPosition)
+  camera.updateProjectionMatrix()
+  controls.update()
+
+  setDebug('視角已重設')
+}
+
+function toggleGrid() {
+  if (!gridHelper) return
+  showGrid.value = !showGrid.value
+  gridHelper.visible = showGrid.value
+}
+
+function toggleAxes() {
+  if (!axesHelper) return
+  showAxes.value = !showAxes.value
+  axesHelper.visible = showAxes.value
+}
+
+/* =========================
+   釋放資源
+========================= */
+function disposeObject(object) {
+  if (!object) return
+
+  object.traverse((child) => {
+    if (child.geometry) {
+      child.geometry.dispose()
+    }
+
+    if (child.material) {
+      if (Array.isArray(child.material)) {
+        child.material.forEach((material) => {
+          if (material && material.dispose) {
+            material.dispose()
+          }
+        })
+      } else if (child.material.dispose) {
+        child.material.dispose()
+      }
+    }
+  })
+}
+
+/* =========================
+   Watch / Lifecycle
+========================= */
+watch(currentStep, async (newStep) => {
+  if (newStep === 1) {
+    await nextTick()
+
+    if (!overviewRef.value) return
+
+    if (overviewRenderer) {
+      if (overviewRenderer.domElement.parentNode) {
+        overviewRenderer.domElement.parentNode.removeChild(overviewRenderer.domElement)
+      }
+
+      overviewRenderer.dispose()
+      overviewRenderer = null
+    }
+
+    overviewCamera = null
+    initOverviewScene()
+  }
+
+  if (newStep === 4 ) {
+    await nextTick()
+
+    if (sortedCompareItems.value.length > 0) {
+      const currentExists = sortedCompareItems.value.some((item) => item.id === selectedPreviewCompareId.value)
+
+      if (!currentExists) {
+        await selectComparePreview(sortedCompareItems.value[0].id)
+      }
+    } else {
+      selectedPreviewCompareId.value = ''
+      clearFaModels()
+      clearCaModels()
+    }
+  }
+
+  if (newStep === 5) {
+    await nextTick()
+
+    clearFaModels()
+    clearCaModels()
+
+    if (mutationPreviewReady.value && selectedMutationCardKey.value) {
+      await selectMutationCard(selectedMutationCardKey.value)
+    }
+  }
+})
+
+onMounted(async () => {
+  await nextTick()
+  initScene()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onWindowResize)
+
+  if (animationId) {
+    cancelAnimationFrame(animationId)
+  }
+
+  if (terrainModel && scene) {
+    scene.remove(terrainModel)
+    disposeObject(terrainModel)
+    terrainModel = null
+  }
+
+  if (generatedBuilding && scene) {
+    scene.remove(generatedBuilding)
+    disposeObject(generatedBuilding)
+    generatedBuilding = null
+  }
+
+  if (generatedBuildingN && scene) {
+    scene.remove(generatedBuildingN)
+    disposeObject(generatedBuildingN)
+    generatedBuildingN = null
+  }
+
+  if (roofAreaModel && scene) {
+    scene.remove(roofAreaModel)
+    disposeObject(roofAreaModel)
+    roofAreaModel = null
+  }
+
+  clearFaModels()
+  clearCaModels()
+
+  if (controls) {
+    controls.dispose()
+    controls = null
+  }
+
+  if (renderer) {
+    renderer.dispose()
+
+    if (renderer.domElement && renderer.domElement.parentNode) {
+      renderer.domElement.parentNode.removeChild(renderer.domElement)
+    }
+
+    renderer = null
+  }
+
+  if (overviewRenderer) {
+    overviewRenderer.dispose()
+
+    if (overviewRenderer.domElement && overviewRenderer.domElement.parentNode) {
+      overviewRenderer.domElement.parentNode.removeChild(overviewRenderer.domElement)
+    }
+
+    overviewRenderer = null
+  }
+
+  scene = null
+  camera = null
+  overviewCamera = null
+  sceneReady = false
+})
+</script>
+
+<style scoped>
+/* 整體頁面版面 */
+.app-layout {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+  background: #f3f3f3;
+}
+
+/* 左側欄位 */
+.sidebar {
+  position: relative;
+  width: 340px;
+  height: 100%;
+  background: #ffffff;
+  border-right: 1px solid #e5e5e5;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+/* 左側欄標題區 */
+.sidebar-header {
+  padding: 28px 24px 20px;
+  border-bottom: 1px solid #ececec;
+}
+
+/* 左側主標題 */
+.sidebar-title-main {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+  color: #111111;
+  line-height: 1.1;
+}
+
+/* 左側副標題 */
+.sidebar-title-sub {
+  margin: 8px 0 20px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #444444;
+  line-height: 1.5;
+}
+
+/* 標頭資訊列 */
+.sidebar-meta-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+/* 資訊卡片共用樣式 */
+.meta-inline-card {
+  flex: 1;
+  min-width: 0;
+  padding: 14px 14px;
+  border-radius: 16px;
+  background: #f8f8f8;
+  border: 1px solid #ececec;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 檔案資訊卡片 */
+.file-meta-inline-card {
+  position: relative;
+  padding-right: 50px;
+}
+
+/* 資訊標籤文字 */
+.meta-inline-label {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 資訊內容文字 */
+.meta-inline-value {
+  font-size: 12px;
+  color: #444444;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* 檔名文字 */
+.file-name-inline {
+  padding-right: 2px;
+}
+
+/* 小圖示按鈕 */
+.icon-btn {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 12px;
+  background: #ececec;
+  color: #111111;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  font-size: 18px;
+}
+
+/* 小圖示按鈕內的符號 */
+.icon-btn-symbol {
+  display: block;
+  line-height: 1;
+}
+
+/* 左側內容區 */
+.sidebar-content {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 區塊卡片共用樣式 */
+.terrain-panel,
+.analysis-panel,
+.step-page-card {
+  padding: 16px;
+  border-radius: 16px;
+  background: #f8f8f8;
+  border: 1px solid #ececec;
+}
+
+/* 地形圖標題 / 分析標題 */
+.terrain-panel-title,
+.analysis-title {
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #111111;
+  text-align: center;
+}
+
+/* 地形圖預覽外框 */
+.terrain-preview-box {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px #e8e8e8;
+}
+
+/* 地形圖預覽畫布 */
+.terrain-preview-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+/* 生成按鈕共用樣式 */
+.generate-btn {
+  width: 100%;
+  height: 44px;
+  margin-top: 14px;
+  border: none;
+  border-radius: 12px;
+  background: #111111;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 屋頂分析按鈕 */
+.roof-btn {
+  height: auto;
+  min-height: 50px;
+  padding: 5px 0;
+  border-radius: 12px;
+  background: #111111;
+  color: #ffffff;
+  font-size: 14px;
+}
+
+/* 分析標題置中 */
+.analysis-title {
+  text-align: center;
+}
+
+/* 圓餅圖外框 */
+.pie-chart-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 6px 0 10px;
+}
+
+/* 圓餅圖尺寸 */
+.pie-chart {
+  width: 160px;
+  height: 160px;
+}
+
+/* 分析內文 */
+.analysis-text {
+  text-align: center;
+  font-size: 14px;
+  color: #444444;
+  line-height: 1.7;
+}
+
+/* 分析總數文字 */
+.analysis-total {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 步驟頁內容排列 */
+.step-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 返回小按鈕 */
+.back-mini-btn {
+  align-self: flex-start;
+  height: 36px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 10px;
+  background: #ececec;
+  color: #111111;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 步驟頁標題 */
+.step-page-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #111111;
+  margin-bottom: 8px;
+}
+
+/* 步驟頁說明文字 */
+.step-page-text {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #444444;
+}
+
+/* 左側底部區 */
+.sidebar-footer {
+  padding: 16px 20px 20px;
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid #ececec;
+}
+
+/* 左側下一步按鈕 */
+.sidebar-next-btn {
+  min-width: 96px;
+  height: 40px;
+  border: none;
+  border-radius: 12px;
+  background: #111111;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 第四頁左側底部動作列 */
+.sidebar-footer-action-row {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* 第四頁左側底部按鈕 */
+.sidebar-footer-action-btn {
+  min-width: 96px;
+  height: 40px;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 儲存按鈕 */
+.sidebar-footer-save-btn {
+  background: #ececec;
+  color: #111111;
+}
+
+/* 變異按鈕 */
+.sidebar-footer-mutate-btn {
+  background: #111111;
+  color: #ffffff;
+}
+
+/* 停用狀態 */
+.sidebar-footer-action-btn:disabled {
+  background: #d4d4d4;
+  color: #8a8a8a;
+  cursor: not-allowed;
+}
+
+/* 側邊彈窗遮罩 */
+.side-modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 100px 18px 18px;
+  z-index: 30;
+}
+
+/* 側邊彈窗卡片 */
+.side-modal-card {
+  position: relative;
+  width: 100%;
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.14);
+  border: 1px solid #ececec;
+  padding: 22px 18px 18px;
+  box-sizing: border-box;
+}
+
+/* 側邊彈窗關閉按鈕 */
+.side-modal-close {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #111111;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* 側邊彈窗標題 */
+.side-modal-title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: #111111;
+  margin-bottom: 20px;
+}
+
+/* 側邊彈窗內容區 */
+.side-modal-body {
+  padding-top: 6px;
+}
+
+/* 開啟檔案按鈕 */
+.open-file-btn {
+  width: 100%;
+  height: 44px;
+  border: none;
+  border-radius: 12px;
+  background: #ececec;
+  color: #111111;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 側邊彈窗檔名文字 */
+.side-modal-file-text {
+  margin: 12px 0 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #555555;
+  word-break: break-word;
+}
+
+/* 側邊彈窗底部按鈕列 */
+.side-modal-footer {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* 側邊彈窗取消按鈕 */
+.modal-cancel-btn {
+  min-width: 84px;
+  height: 40px;
+  border: 1px solid #111111;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #111111;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 側邊彈窗確認按鈕 */
+.modal-confirm-btn {
+  min-width: 84px;
+  height: 40px;
+  border: none;
+  border-radius: 12px;
+  background: #9c9c9c;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 側邊彈窗確認按鈕停用狀態 */
+.modal-confirm-btn:disabled {
+  background: #d2d2d2;
+  cursor: not-allowed;
+}
+
+/* 3D 顯示區 */
+.viewer-area {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  padding: 18px;
+  box-sizing: border-box;
+}
+
+/* 3D 顯示外框 */
+.viewer-frame {
+  width: 100%;
+  height: 100%;
+  border-radius: 26px;
+  overflow: hidden;
+  background: #f5f5f5;
+  box-shadow: inset 0 0 0 1px #e8e8e8;
+}
+
+/* Three.js 畫布 */
+.three-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+/* 偵錯資訊框 */
+.debug-box {
+  position: absolute;
+  left: 38px;
+  bottom: 90px;
+  z-index: 20;
+  min-width: 260px;
+  max-width: 520px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(17, 17, 17, 0.82);
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(8px);
+}
+
+/* 左下工具列 */
+.preview-toolbar {
+  position: absolute;
+  left: 38px;
+  bottom: 38px;
+  z-index: 20;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* 工具列按鈕 */
+.toolbar-btn {
+  height: 40px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #111111;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(8px);
+  transition: 0.2s ease;
+}
+
+/* 工具列按鈕滑過效果 */
+.toolbar-btn:hover {
+  transform: translateY(-1px);
+  background: #ffffff;
+}
+
+/* 首頁彈窗遮罩 */
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(4px);
+}
+
+/* 首頁彈窗卡片 */
+.modal-card {
+  width: 85vw;
+  height: 85vh;
+  max-width: 1280px;
+  max-height: 900px;
+  padding: 48px;
+  border-radius: 30px;
+  background: #ffffff;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 首頁主標題 */
+.modal-title {
+  margin: 0 0 20px 0;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #111111;
+  display: block;
+  margin: 0 auto;
+}
+
+/* welcome 下方首圖區塊 */
+.welcome-hero-block {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin: 24px 0 32px;
+}
+
+/* welcome 首圖 */
+.welcome-hero-image {
+  display: block;
+  max-width: 300px;
+  width: 100%;
+  height: 300px;
+  object-fit: contain;
+  border-radius: 20px;
+}
+
+/* 首頁副標題文字 */
+.modal-text {
+  margin: 0 0 30px 0;
+  font-size: 35px;
+  color: #444444;
+  display: block;
+  margin: 0 auto;
+}
+
+/* 區塊外距 */
+.modal-block {
+  margin-bottom: 24px;
+}
+
+/* 欄位標題 */
+.modal-label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #222222;
+}
+
+/* 輸入框共用樣式 */
+.modal-input {
+  width: auto;
+  height: 54px;
+  padding: 0 16px;
+  border: 1px solid #d9d9d9;
+  border-radius: 14px;
+  font-size: 16px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+/* 輸入框聚焦狀態 */
+.modal-input:focus {
+  border-color: #111111;
+}
+
+/* 首頁單行排列列 */
+.modal-inline-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: fit-content;
+  margin: 0 auto;
+  flex-wrap: nowrap;
+}
+
+/* 單行模式的 label */
+.modal-inline-label {
+  display: inline-block;
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* 單行模式的 input */
+.modal-inline-input {
+  width: 200px;
+  margin: 0;
+}
+
+/* 中間分隔符號 */
+.modal-divider {
+  display: inline-block;
+  color: #888;
+  line-height: 1;
+}
+
+/* 單行模式的按鈕 */
+.modal-inline-btn {
+  margin: 0;
+  min-width: 160px;
+  height: 46px;
+  flex-shrink: 0;
+}
+
+/* 單行模式的檔名文字 */
+.modal-inline-file-text {
+  display: inline-block;
+  margin: 0;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+/* 首頁一般操作按鈕 */
+.modal-action-btn {
+  min-width: 180px;
+  height: 46px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 12px;
+  background: #ececec;
+  color: #111111;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  display: block;
+  margin: 0 auto;
+}
+
+/* 首頁檔名文字 */
+.modal-file-text {
+  margin-top: 12px;
+  font-size: 14px;
+  color: #555555;
+}
+
+/* 首頁底部按鈕列 */
+.modal-footer {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 首頁開始按鈕 */
+.modal-start-btn {
+  min-width: 160px;
+  height: 50px;
+  padding: 0 24px;
+  border: none;
+  border-radius: 14px;
+  background: #111111;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* 首頁開始按鈕停用狀態 */
+.modal-start-btn:disabled {
+  background: #bfbfbf;
+  cursor: not-allowed;
+}
+
+/* 隱藏的檔案 input */
+.hidden-file-input {
+  display: none;
+}
+
+/* 第二頁 / 第三頁：量體卡片 */
+.volume-card,
+.ca-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* 第二頁 / 第三頁標題 */
+.volume-title {
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 模式切換按鈕列 */
+.volume-mode-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+/* 模式按鈕 */
+.mode-btn {
+  min-height: 42px;
+  padding: 10px 8px;
+  border: 1px solid #d8d8d8;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #222222;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+/* 模式按鈕啟用狀態 */
+.mode-btn.active {
+  background: #111111;
+  color: #ffffff;
+  border-color: #111111;
+}
+
+/* 每個量體區塊 */
+.volume-section {
+  padding: 14px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #ebebeb;
+}
+
+/* 小標題列 */
+.volume-subtitle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+/* 滿版區塊時取消底部外距 */
+.full-width {
+  margin-bottom: 0;
+}
+
+/* 區塊小標題 */
+.volume-subtitle {
+  font-size: 14px;
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 下拉選單 */
+.volume-select {
+  min-width: 110px;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid #d7d7d7;
+  border-radius: 10px;
+  background: #ffffff;
+  font-size: 12px;
+  color: #222222;
+  outline: none;
+}
+
+/* 勾選方塊格線 */
+.block-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+/* 勾選項目 */
+.block-check-item {
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid #e3e3e3;
+  border-radius: 12px;
+  background: #fafafa;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #333333;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+/* 勾選框 */
+.block-check-item input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+/* 未選取文字 */
+.unselected-blocks-text {
+  font-size: 14px;
+  line-height: 1.8;
+  color: #444444;
+}
+
+/* 未選取標籤 */
+.unselected-label {
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 更新說明文字 */
+.renewal-text {
+  font-size: 15px;
+  line-height: 1.9;
+  color: #333333;
+}
+
+/* 執行模擬按鈕 */
+.volume-sim-btn {
+  margin-top: 0;
+}
+
+/* 結果卡片 */
+.result-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 結果圖表外框 */
+.result-chart-wrap {
+  width: 100%;
+}
+
+/* 長條圖區 */
+.result-chart {
+  min-height: 320px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 28px;
+  padding: 10px 8px 0;
+}
+
+/* 每一個長條欄位 */
+.result-bar-col {
+  flex: 1;
+  max-width: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 長條上方數值 */
+.result-bar-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 長條底軌 */
+.result-bar-track {
+  width: 56px;
+  height: 180px;
+  border-radius: 16px;
+  background: #ededed;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+/* 長條填色 */
+.result-bar-fill {
+  width: 100%;
+  min-height: 8px;
+  border-radius: 16px 16px 0 0;
+  transition: height 0.3s ease;
+}
+
+/* 長條主標籤 */
+.result-bar-label {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 800;
+  color: #111111;
+  line-height: 1.5;
+}
+
+/* 長條說明文字 */
+.result-bar-desc {
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #444444;
+}
+
+/* 無結果時文字 */
+.result-empty-text {
+  text-align: center;
+  font-size: 14px;
+  color: #666666;
+  padding: 30px 0 10px;
+}
+
+/* 第三頁：雙圓餅圖外框 */
+.pie-dual-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 單一圓餅圖區塊 */
+.pie-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 額外補充文字 */
+.ca-extra-text {
+  margin-top: 4px;
+}
+
+/* 圖例區 */
+.ca-legend {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #ebebeb;
+}
+
+/* 單一圖例項目 */
+.ca-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #333333;
+  word-break: break-word;
+}
+
+/* 圖例圓點 */
+.legend-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+/* 各種圖例顏色 */
+.legend-dead {
+  background: #7a7a7a;
+}
+
+.legend-alive {
+  background: #111111;
+}
+
+.legend-roof1 {
+  background: #4da6ff;
+}
+
+.legend-roof0 {
+  background: #8fd19e;
+}
+
+.legend-tcode {
+  background: #ff8a5b;
+}
+
+/* 圖例雙行文字 */
+.ca-two-line-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 第三頁：容積狀態卡 */
+.selection-status-card {
+  padding: 14px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #ebebeb;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 第三頁：狀態卡標題列 */
+.selection-status-head,
+.selection-status-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: center;
+  text-align: center;
+}
+
+/* 第三頁：狀態卡標題 */
+.selection-status-head {
+  font-size: 14px;
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 第三頁：狀態卡內容 */
+.selection-status-cell {
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f8f8f8;
+  border: 1px solid #ececec;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #333333;
+  line-height: 1.6;
+  text-align: center;
+}
+
+/* 第三頁：右側欄位可放文字與按鈕 */
+.selection-status-cell-right {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 狀態文字 */
+.selection-status-text {
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+/* 尚未選擇紅字 */
+.pending-red-text {
+  color: #d93025;
+  font-weight: 800;
+}
+
+/* 小跳轉按鈕 */
+.jump-select-btn {
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 10px;
+  background: #ececec;
+  color: #111111;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* 第三頁：動作按鈕列 */
+.ca-action-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 次要操作按鈕 */
+.sub-action-btn {
+  width: 100%;
+  min-height: 42px;
+  border: none;
+  border-radius: 12px;
+  background: #ececec;
+  color: #111111;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 次要按鈕停用 */
+.sub-action-btn:disabled {
+  background: #dcdcdc;
+  color: #8b8b8b;
+  cursor: not-allowed;
+}
+
+/* 第三頁量體生成按鈕取消原本上距 */
+.ca-generate-btn {
+  margin-top: 0;
+}
+
+/* 評比卡片 */
+.compare-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 評比上方列 */
+.compare-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* 評比標題 */
+.compare-title {
+  text-align: left;
+  font-size: 20px;
+}
+
+/* 評比表格 */
+.compare-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 評比表頭 */
+.compare-table-head,
+.compare-table-row {
+  display: grid;
+  grid-template-columns: 0.6fr 1.2fr 1.5fr 0.7fr;
+  gap: 10px;
+  align-items: center;
+  text-align: center;
+}
+
+/* 表頭樣式 */
+.compare-table-head {
+  padding: 12px 10px;
+  border-radius: 12px;
+  background: #f2f2f2;
+  color: #111111;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* 表身樣式 */
+.compare-table-row {
+  padding: 12px 10px;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #ebebeb;
+  color: #333333;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+/* 清除小按鈕 */
+.compare-clear-btn {
+  min-width: 37px;
+  height: 25px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 10px;
+  background: #696969;
+  color: #ffffff;
+  font-size: 8px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 第四頁主卡片 */
+.eval-page-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 第四頁主標題 */
+.eval-main-title,
+.eval-section-title {
+  text-align: center;
+}
+
+/* 第四頁表格 */
+.compare-table-page4 {
+  gap: 10px;
+}
+
+.compare-table-head-page4,
+.compare-table-row-page4 {
+  grid-template-columns: 0.6fr 1.3fr 1.5fr;
+}
+
+/* 第四頁三圖排列 */
+.eval-pie-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+/* 單一圓餅圖卡 */
+.eval-pie-card {
+  padding: 14px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #ebebeb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 圓餅圖標題 */
+.eval-pie-title {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 圓餅圖本體 */
+.eval-pie-graph {
+  width: 150px;
+  height: 150px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* 圓餅圖中間白洞 */
+.eval-pie-graph::after {
+  content: '';
+  position: absolute;
+  inset: 28px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px #eeeeee;
+}
+
+/* 圖例清單 */
+.eval-legend-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 圖例單列 */
+.eval-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #333333;
+  word-break: break-word;
+}
+
+/* 圖例點 */
+.eval-legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+/* 第四頁右側上方卡片區 */
+.eval-preview-cards {
+  position: absolute;
+  top: 32px;
+  left: 32px;
+  right: 32px;
+  z-index: 22;
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+/* 右側評比卡片 */
+.eval-preview-card {
+  min-height: 220px;
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: 0.25s ease;
+  box-sizing: border-box;
+}
+
+/* 非選中卡片變淡 */
+.eval-preview-card.inactive {
+  opacity: 0.26;
+}
+
+/* 排名 */
+.eval-preview-rank {
+  font-size: 20px;
+  font-weight: 800;
+  color: #111111;
+  line-height: 1;
+}
+
+/* 主要文字區 */
+.eval-preview-main-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 文字A */
+.eval-preview-text-a {
+  font-size: 20px;
+  font-weight: 800;
+  color: #111111;
+  line-height: 1.3;
+  text-align: left;
+}
+
+/* 文字B */
+.eval-preview-text-b {
+  font-size: 13px;
+  color: #444444;
+  line-height: 1.5;
+  text-align: left;
+}
+
+/* 卡片小長條群組 */
+.eval-mini-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 單一小長條 */
+.eval-mini-bar-item {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 48px;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 小長條標題 */
+.eval-mini-bar-label {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #333333;
+}
+
+/* 小長條軌道 */
+.eval-mini-bar-track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(17, 17, 17, 0.1);
+  overflow: hidden;
+}
+
+/* 小長條填色 */
+.eval-mini-bar-fill {
+  height: 100%;
+  min-width: 6px;
+  border-radius: 999px;
+  background: #111111;
+}
+
+/* 小長條數值 */
+.eval-mini-bar-value {
+  text-align: right;
+  font-size: 11px;
+  font-weight: 700;
+  color: #111111;
+}
+
+/* 卡片底部 */
+.eval-preview-bottom {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* 占比文字 */
+.eval-preview-score {
+  font-size: 12px;
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 顯示模型按鈕 */
+.eval-show-model-btn {
+  min-width: 86px;
+  height: 34px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 10px;
+  background: #111111;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+
+
+/* 第五頁卡片 */
+.mutation-page-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 第五頁說明文字 */
+.mutation-page-text {
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.8;
+  color: #444444;
+}
+
+/* 第五頁列表 */
+.mutation-rank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 第五頁排序卡 */
+.mutation-rank-card {
+  padding: 16px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #ebebeb;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 第五頁卡片表頭 */
+.mutation-rank-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* 第五頁排名 */
+.mutation-rank-no {
+  font-size: 20px;
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 第五頁分數 */
+.mutation-rank-score {
+  font-size: 13px;
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 第五頁資料格線 */
+.mutation-rank-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+/* 第五頁單一欄位 */
+.mutation-rank-item {
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8f8f8;
+  border: 1px solid #ececec;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 第五頁欄位標題 */
+.mutation-rank-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #111111;
+}
+
+/* 第五頁欄位內容 */
+.mutation-rank-value {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #444444;
+  word-break: break-word;
+}
+
+/* 第五頁表格欄位 */
+.compare-table-page5 {
+  gap: 10px;
+}
+
+.compare-table-head-page5,
+.compare-table-row-page5 {
+  grid-template-columns: 0.6fr 1.2fr 1.5fr 0.8fr;
+}
+
+/* 第五頁區塊標題 */
+.mutation-block-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #111111;
+  margin-bottom: 10px;
+}
+
+/* 第五頁已選擇變異區塊 */
+.mutation-selected-wrap {
+  padding: 14px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 2px solid #111111;
+}
+
+/* 第五頁原始列表區塊 */
+.mutation-list-wrap {
+  padding: 14px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #ebebeb;
+}
+
+/* 第五頁已選擇列 */
+.mutation-selected-row {
+  background: #f3f3f3;
+  border: 1px solid #d9d9d9;
+}
+
+/* 第五頁操作按鈕 */
+.mutation-action-btn {
+  min-width: 44px;
+  height: 28px;
+  font-size: 10px;
+  padding: 0 10px;
+}
+
+/* 沒有操作時的佔位 */
+.mutation-empty-action {
+  display: inline-block;
+  font-size: 12px;
+  color: #999999;
+}
+
+/* 第五頁確定按鈕 */
+.mutation-confirm-btn {
+  margin-top: 0;
+}
+
+/* 第五頁右側選中卡片撐滿 */
+.eval-preview-card.expanded {
+  width: 100% !important;
+  flex: 1 1 100%;
+}
+
+/* 第五頁選中後，其他卡片隱藏用 */
+.eval-preview-card[style*='width: 0%'] {
+  min-width: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  opacity: 0 !important;
+  overflow: hidden;
+}
+
+/* 第五頁區塊間距 */
+.mutation-page-card {
+  gap: 16px;
+}
+
+
+
+@media (max-width: 860px) {
+  .mutation-rank-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 第五頁變異卡片 */
+.mutation-cards-wrap {
+  position: absolute;
+  top: 32px;
+  left: 32px;
+  right: 32px;
+  z-index: 22;
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.mutation-preview-card {
+  flex: 1 1 0;
+  min-height: 220px;
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+  transition: 0.25s ease;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.mutation-preview-card.expanded {
+  width: 100%;
+  flex: 1 1 100%;
+}
+
+.mutation-card-detail-panel {
+  flex: 1;
+  min-width: 0;
+  border-left: 1px solid #ececec;
+  padding-left: 18px;
+  overflow: hidden;
+}
+
+.mutation-card-detail-scale {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mutation-card-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mutation-preview-card.expanded .mutation-card-summary {
+  flex: 0 0 320px;
+  max-width: 320px;
+  order: 0;
+}
+
+.mutation-preview-card.expanded .mutation-card-detail-panel {
+  order: 1;
+}
+
+.mutation-card-summary-scale {
+  width: 100%;
+  height: 100%;
+}
+
+.mutation-card-summary-media {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+  height: 100%;
+}
+
+.mutation-card-image-box {
+  width: clamp(96px, 42%, 160px);
+  min-width: 96px;
+  aspect-ratio: 1 / 1;
+  align-self: flex-start;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #f3f3f3;
+  flex-shrink: 0;
+}
+
+.mutation-card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.mutation-card-summary-side {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.mutation-card-summary-text-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.mutation-card-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #111111;
+  text-align: left;
+  line-height: 1.2;
+}
+
+.mutation-card-text {
+  font-size: 14px;
+  color: #333333;
+  line-height: 1.65;
+  text-align: left;
+}
+
+.mutation-card-action-row {
+  width: 100%;
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+}
+
+.mutation-card-selected-tag {
+  min-width: 86px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: #ececec;
+  color: #111111;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mutation-card-top-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.mutation-back-btn {
+  min-width: 130px;
+}
+
+.mutation-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mutation-detail-item {
+  background: #fafafa;
+  border: 1px solid #ececec;
+  border-radius: 16px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mutation-detail-item-wide {
+  grid-column: 1 / -1;
+}
+
+.mutation-detail-top,
+.mutation-inline-row,
+.mutation-dual-text-row,
+.mutation-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mutation-dual-text-row {
+  justify-content: space-between;
+}
+
+
+.mutation-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  display: inline-block;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.mini-ghost-btn {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d7d7d7;
+  border-radius: 10px;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mutation-control-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #fafafa;
+  border: 1px solid #ececec;
+  border-radius: 16px;
+  padding: 12px;
+}
+
+.mutation-generate-btn {
+  align-self: flex-start;
+  min-width: 150px;
+}
+
+.mutation-base-style-grid {
+  margin-top: 2px;
+}
+
+.mutation-number-input {
+  width: 120px;
+  height: 34px;
+  border: 1px solid #d6d6d6;
+  border-radius: 10px;
+  padding: 0 10px;
+}
+
+.mutation-text-note {
+  font-size: 14px;
+  font-weight: 700;
+  color: #222222;
+}
+
+.mutation-path-row {
+  justify-content: flex-start;
+}
+
+@media (max-width: 1180px) {
+  .mutation-preview-card,
+  .mutation-preview-card.expanded {
+    flex-direction: column;
+  }
+
+  .mutation-card-detail-panel {
+    border-left: none;
+    border-top: 1px solid #ececec;
+    padding-left: 0;
+    padding-top: 16px;
+  }
+
+  .mutation-preview-card.expanded .mutation-card-summary {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+}
+
+
+</style>
