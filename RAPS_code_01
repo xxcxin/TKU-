@@ -1,0 +1,3476 @@
+<template>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1 class="sidebar-title-main">RAPS</h1>
+        <p class="sidebar-title-sub">Rooftop Activity Path System</p>
+        <p class="sidebar-title-sub">屋頂活動路徑系統</p>
+
+        <div class="sidebar-meta-row">
+          <div class="meta-inline-card">
+            <span class="meta-inline-label">使用者</span>
+            <span class="meta-inline-value">{{ userName || '尚未輸入' }}</span>
+          </div>
+
+          <div class="meta-inline-card file-meta-inline-card">
+            <span class="meta-inline-label">地形圖</span>
+            <span class="meta-inline-value file-name-inline">
+              {{ currentModelName || '尚未載入' }}
+            </span>
+
+            <button
+              class="icon-btn"
+              type="button"
+              title="更新檔案"
+              @click="openUpdateModal"
+            >
+              <span class="icon-btn-symbol">🗁</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-content">
+        <!-- ==================== 第 1 頁：地形圖與建物 ==================== -->
+        <template v-if="currentStep === 1">
+          <div class="terrain-panel">
+            <div class="terrain-panel-title">地形圖</div>
+
+            <div class="terrain-preview-box">
+              <div ref="overviewRef" class="terrain-preview-canvas"></div>
+            </div>
+
+            <button class="generate-btn" type="button" @click="insertGeneratedBuilding">
+              建物生成
+            </button>
+
+            <div class="analysis-panel inner-panel">
+              <div class="analysis-title">步登公寓數量分析</div>
+
+              <div class="pie-chart-wrap">
+                <svg viewBox="0 0 120 120" class="pie-chart">
+                  <circle
+                    cx="60"
+                    cy="60"
+                    r="42"
+                    fill="none"
+                    stroke="#e8e8e8"
+                    stroke-width="16"
+                  />
+
+                  <circle
+                    cx="60"
+                    cy="60"
+                    r="42"
+                    fill="none"
+                    :stroke="buildingStepStyle.color"
+                    stroke-width="16"
+                    :stroke-dasharray="buildingPieDashArray"
+                    stroke-dashoffset="0"
+                    transform="rotate(-90 60 60)"
+                    stroke-linecap="butt"
+                  />
+                </svg>
+              </div>
+
+              <div class="analysis-text">
+                步登公寓 {{ stepApartmentCount }} 棟 ｜ 一般建築 {{ normalBuildingCount }} 棟
+              </div>
+
+              <div class="analysis-total">
+                總建物 {{ totalBuildingCount }} 棟
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ==================== 第 2 頁：屋頂空間 ==================== -->
+        <template v-else-if="currentStep === 2">
+          <div class="step-page">
+            <button class="back-mini-btn" type="button" @click="goPrevStep">
+              ← 回到第一頁
+            </button>
+
+            <div class="step-page-card roof-space-card">
+              <div class="volume-title">屋頂空間生成</div>
+
+              <button class="generate-btn" type="button" @click="insertRoofSpace">
+                生成屋頂空間
+              </button>
+
+              <div v-if="roofSpaceGenerated" class="analysis-panel inner-panel roof-analysis-panel">
+                <div class="analysis-title">屋頂空間面積分析</div>
+
+                <div class="roof-area-total">
+                  屋頂可用面積 {{ formatArea(roofUsableArea) }} m²
+                </div>
+
+                <div class="pie-chart-wrap">
+                  <svg viewBox="0 0 120 120" class="pie-chart">
+                    <circle
+                      cx="60"
+                      cy="60"
+                      r="42"
+                      fill="none"
+                      stroke="#e8e8e8"
+                      stroke-width="16"
+                    />
+
+                    <circle
+                      cx="60"
+                      cy="60"
+                      r="42"
+                      fill="none"
+                      :stroke="caModelStyle.roof1.color"
+                      stroke-width="16"
+                      :stroke-dasharray="roofPieDashArray"
+                      stroke-dashoffset="0"
+                      transform="rotate(-90 60 60)"
+                      stroke-linecap="butt"
+                    />
+                  </svg>
+                </div>
+
+                <div class="analysis-text ca-two-line-text">
+                  <div>屋頂商業空間 ｜ 屋頂開放空間</div>
+                  <div>{{ formatArea(roofCommercialArea) }} m² ｜ {{ formatArea(roofOpenArea) }} m²</div>
+                  <div>{{ formatPercent(roofCommercialPercent) }} ｜ {{ formatPercent(roofOpenPercent) }}</div>
+                </div>
+              </div>
+
+              <div v-else class="result-empty-text">
+                尚未生成屋頂空間
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ==================== 第 3 頁：異質變異 ==================== -->
+        <template v-else-if="currentStep === 3">
+          <div class="step-page">
+            <button class="back-mini-btn" type="button" @click="goPrevStep">
+              ← 回到屋頂空間
+            </button>
+
+            <div class="step-page-card mutation-page-card hetero-page-card">
+              <div class="volume-title">異質變異</div>
+
+              <div class="mutation-single-hero">
+                <div class="mutation-card-image-box mutation-single-image-box">
+                  <img src="/models/異質變異.png" alt="異質變異" class="mutation-card-image" />
+                </div>
+
+                <div class="mutation-card-summary-text-group">
+                  <div class="mutation-card-title">異質變異</div>
+                  <div class="mutation-card-text">
+                    以原始街道作為活動路徑依據，生成屋頂活動路徑與相關公共空間。
+                  </div>
+                </div>
+              </div>
+
+              <div class="road-selection-panel">
+                <div class="road-selection-title">道路選擇</div>
+
+                <div class="road-mode-row">
+                  <button
+                    class="road-mode-btn"
+                    :class="{ active: roadSelectionMode === 'ai' }"
+                    type="button"
+                    @click="generateAiHeatmap"
+                  >
+                    AI熱力圖生成
+                  </button>
+
+                  <button
+                    class="road-mode-btn"
+                    :class="{ active: roadSelectionMode === 'manual' }"
+                    type="button"
+                    @click="openManualRoadSelection"
+                  >
+                    手動選擇
+                  </button>
+                </div>
+
+                <div v-if="roadSelectionMode === 'ai'" class="road-sub-panel">
+                  <div class="road-sub-title">AI熱力圖生成</div>
+
+                  <div class="road-ai-preview-box">
+                    <img
+                      :src="aiHeatmapImageSrc"
+                      alt="AI 熱力圖"
+                      class="road-ai-image"
+                    />
+                  </div>
+
+                  <button
+                    class="mini-ghost-btn road-confirm-btn"
+                    type="button"
+                    @click="confirmHeteroStreet"
+                  >
+                    確定
+                  </button>
+                </div>
+
+                <div v-else-if="roadSelectionMode === 'manual'" class="road-sub-panel">
+                  <div class="road-sub-title">手動選擇</div>
+
+                  <div class="manual-draw-actions">
+                    <button
+                      class="mini-ghost-btn street-select-btn"
+                      type="button"
+                      @click="startManualPathDrawing"
+                    >
+                      線段選擇
+                    </button>
+
+                    <button
+                      class="mini-ghost-btn street-reset-btn"
+                      type="button"
+                      @click="resetManualPathDrawing"
+                    >
+                      重置
+                    </button>
+                  </div>
+
+                  <button
+                    class="mini-ghost-btn road-confirm-btn"
+                    type="button"
+                    @click="confirmHeteroStreet"
+                  >
+                    確定
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="heteroStreetConfirmed" class="mutation-detail-grid">
+                <div class="mutation-detail-item mutation-detail-item-wide">
+                  <div
+                    v-for="(row, rowIndex) in mutationSummaryRows"
+                    :key="`mutation-summary-row-${rowIndex}`"
+                    class="mutation-dual-text-row"
+                  >
+                    <div
+                      v-for="item in row"
+                      :key="item.modelKey"
+                    >
+                      {{ item.label }} {{ getMutationCount(item.modelKey) }} 單位
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  v-for="item in activeMutationStyleDetails"
+                  :key="item.modelKey"
+                  class="mutation-detail-item"
+                >
+                  <div class="mutation-detail-top">
+                    <span>{{ item.label }}</span>
+                  </div>
+                </div>
+
+                <div class="mutation-text-note">
+                  此路徑建議 {{ heteroSuggestedRangeText }} 公尺　建議活動：慢跑活動
+                </div>
+
+                <div class="mutation-inline-row mutation-path-row">
+                  <span>活動長度</span>
+                  <input v-model="heteroActivityLength" type="number" class="mutation-number-input" />
+                  <button class="generate-btn mutation-generate-btn" type="button" @click="generateHeteroPath">
+                    生成路徑
+                  </button>
+                </div>
+
+                <div v-if="heteroPathGenerated" class="mutation-detail-item mutation-detail-item-wide">
+                  <div class="mutation-detail-top">
+                    <span>活動路徑 {{ getMutationCount(activeRapsModelKey) }} 單位</span>
+                  </div>
+                </div>
+              </div>
+
+              <div v-else class="result-empty-text">
+                請先選擇並確認原始街道
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <div class="sidebar-footer">
+        <button
+          v-if="currentStep < TOTAL_STEPS"
+          class="sidebar-next-btn"
+          type="button"
+          @click="goNextStep"
+        >
+          繼續
+        </button>
+      </div>
+
+      <div v-if="showUpdateModal" class="side-modal-overlay">
+        <div class="side-modal-card">
+          <button class="side-modal-close" type="button" @click="closeUpdateModal">
+            ×
+          </button>
+
+          <div class="side-modal-title">更新檔案</div>
+
+          <div class="side-modal-body">
+            <button class="open-file-btn" type="button" @click="openFilePicker">
+              開啟新檔案
+            </button>
+
+            <p class="side-modal-file-text">
+              {{ pendingFileName || '尚未選擇新檔案' }}
+            </p>
+          </div>
+
+          <div class="side-modal-footer">
+            <button class="modal-cancel-btn" type="button" @click="closeUpdateModal">
+              取消
+            </button>
+
+            <button
+              class="modal-confirm-btn"
+              type="button"
+              :disabled="!pendingFile"
+              @click="confirmUpdateFile"
+            >
+              確定
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="viewer-area">
+      <div class="viewer-frame">
+        <div ref="containerRef" class="three-canvas"></div>
+      </div>
+
+      <div v-if="visibleLegendItems.length > 0" class="viewer-legend">
+        <div
+          v-for="item in visibleLegendItems"
+          :key="item.key"
+          class="viewer-legend-item"
+        >
+          <span
+            class="viewer-legend-dot"
+            :style="{ background: item.color, opacity: item.opacity }"
+          ></span>
+          <span>{{ item.label }}</span>
+        </div>
+      </div>
+
+      <div v-if="isDrawingManualPath" class="path-draw-hint">
+        右側預覽窗已切換為平面操作視角。點擊畫面加入路徑點，點越多會自動連線；仍可正常旋轉預覽窗。
+      </div>
+
+      <div class="debug-box">
+        {{ debugMessage }}
+      </div>
+
+      <div class="preview-toolbar">
+        <button class="toolbar-btn" type="button" @click="resetView">重設視角</button>
+        <button class="toolbar-btn" type="button" @click="toggleGrid">格線</button>
+        <button class="toolbar-btn" type="button" @click="toggleAxes">軸</button>
+      </div>
+
+      <input
+        ref="fileInputRef"
+        type="file"
+        class="hidden-file-input"
+        accept=".dxf,.glb,.gltf"
+        @change="handleFileChangeWrapper"
+      />
+    </main>
+
+    <div v-if="showWelcomeModal" class="modal-overlay">
+      <div class="modal-card">
+        <h1 class="modal-title">RAPS 屋頂活動路徑系統</h1>
+
+        <p class="modal-text">welcome</p>
+
+        <div class="welcome-hero-block">
+          <img
+            src="/models/首圖.gif"
+            alt="welcome 首圖"
+            class="welcome-hero-image"
+          />
+        </div>
+
+        <div class="modal-inline-row">
+          <label class="modal-label modal-inline-label">使用者名稱</label>
+
+          <input
+            v-model="userName"
+            type="text"
+            class="modal-input modal-inline-input"
+            placeholder="請輸入使用者名稱"
+          />
+
+          <span class="modal-divider">|</span>
+
+          <button class="modal-action-btn modal-inline-btn" type="button" @click="openFilePicker">
+            導入地形圖
+          </button>
+
+          <span class="modal-file-text modal-inline-file-text">
+            {{ selectedFileName || '尚未選擇檔案' }}
+          </span>
+        </div>
+
+        <div class="modal-footer">
+          <button
+            class="modal-start-btn"
+            type="button"
+            :disabled="!canStart"
+            @click="handleStart"
+          >
+            開始
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import * as THREE from 'three'
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { DXFLoader } from 'three-dxf-loader'
+
+// =========================
+// 基本 DOM / 共用狀態
+// =========================
+const containerRef = ref(null)
+const overviewRef = ref(null)
+const fileInputRef = ref(null)
+
+const showWelcomeModal = ref(true)
+const showUpdateModal = ref(false)
+
+const userName = ref('')
+const selectedFile = ref(null)
+const selectedFileName = ref('')
+const currentModelName = ref('')
+
+const pendingFile = ref(null)
+const pendingFileName = ref('')
+
+const showGrid = ref(true)
+const showAxes = ref(true)
+const debugMessage = ref('等待初始化場景')
+
+const currentStep = ref(1)
+const TOTAL_STEPS = 3
+
+// =========================
+// 模型顏色設定
+// =========================
+const buildingStepStyle = {
+  color: '#ffffff',
+  opacity: 1
+}
+
+const buildingNormalStyle = {
+  color: '#bdbdbd',
+  opacity: 0.75
+}
+
+const roofAreaStyle = {
+  color: '#ff684d',
+  opacity: 0.35
+}
+
+const caModelStyle = {
+  roof1: {
+    color: '#ffb71c',
+    opacity: 0.8
+  },
+  roof0: {
+    color: '#ffffff',
+    opacity: 0.3
+  }
+}
+
+const mutationModelStyles = {
+  heteroRoof: { color: '#ffffff', opacity: 0.6 },
+  heteroTcode: { color: '#ff9a66', opacity: 0.8 },
+  heteroRoof1: { color: '#ffcc4d', opacity: 0.7 },
+  heteroPatharea: { color: '#76b7ff', opacity: 0.68 },
+  heteroRaps: { color: '#ff4d4d', opacity: 0.95 },
+  aiRoad: { color: '#ff4d4d', opacity: 0.95 },
+  aiTcode: { color: '#ff9a66', opacity: 0.8 },
+  aiRaps: { color: '#ff4d4d', opacity: 0.95 }
+}
+
+const manualPathStyle = {
+  color: mutationModelStyles.heteroRaps.color,
+  opacity: mutationModelStyles.heteroRaps.opacity
+}
+
+// =========================
+// 第一頁建物資料
+// =========================
+const stepApartmentCount = ref(0)
+const normalBuildingCount = ref(0)
+
+const totalBuildingCount = computed(() => {
+  return stepApartmentCount.value + normalBuildingCount.value
+})
+
+const buildingGenerated = computed(() => {
+  return totalBuildingCount.value > 0
+})
+
+const buildingPieDashArray = computed(() => {
+  const radius = 42
+  const circumference = 2 * Math.PI * radius
+  const total = totalBuildingCount.value
+
+  if (total <= 0) {
+    return `0 ${circumference}`
+  }
+
+  const stepLength = (stepApartmentCount.value / total) * circumference
+  return `${stepLength} ${circumference - stepLength}`
+})
+
+// =========================
+// 第二頁屋頂空間資料
+// =========================
+const roofSpaceGenerated = ref(false)
+const roofUsableArea = ref(0)
+const roofCommercialArea = ref(0)
+const roofOpenArea = ref(0)
+
+const roofTotalProgramArea = computed(() => {
+  return roofCommercialArea.value + roofOpenArea.value
+})
+
+const roofCommercialPercent = computed(() => {
+  if (roofTotalProgramArea.value <= 0) return 0
+  return (roofCommercialArea.value / roofTotalProgramArea.value) * 100
+})
+
+const roofOpenPercent = computed(() => {
+  if (roofTotalProgramArea.value <= 0) return 0
+  return (roofOpenArea.value / roofTotalProgramArea.value) * 100
+})
+
+const roofPieDashArray = computed(() => {
+  const radius = 42
+  const circumference = 2 * Math.PI * radius
+  const total = roofTotalProgramArea.value
+
+  if (total <= 0) {
+    return `0 ${circumference}`
+  }
+
+  const commercialLength = (roofCommercialArea.value / total) * circumference
+  return `${commercialLength} ${circumference - commercialLength}`
+})
+
+// =========================
+// 第三頁異質變異資料
+// =========================
+const heteroStreetConfirmed = ref(false)
+const heteroActivityLength = ref(1000)
+const heteroPathGenerated = ref(false)
+
+const roadSelectionMode = ref('')
+const aiHeatmapVisible = ref(false)
+const aiHeatmapImageSrc = '/map/AI.png'
+const aiRoadModelGenerated = ref(false)
+
+const mutationModelCounts = ref({
+  heteroRoof: 0,
+  heteroTcode: 0,
+  heteroRoof1: 0,
+  heteroPatharea: 0,
+  heteroRaps: 0,
+  aiRoad: 0,
+  aiTcode: 0,
+  aiRaps: 0
+})
+
+const mutationHeteroStyleDetails = [
+  { modelKey: 'heteroRoof', label: '活動屋頂' },
+  { modelKey: 'heteroTcode', label: '步登公寓垂直動線' },
+  { modelKey: 'heteroPatharea', label: '屋頂公共空間' },
+  { modelKey: 'heteroRoof1', label: '屋頂商業空間' }
+]
+
+const mutationAiStyleDetails = [
+  { modelKey: 'aiRoad', label: 'AI熱力圖道路' },
+  { modelKey: 'aiTcode', label: '步登公寓垂直動線' }
+]
+
+const activeMutationStyleDetails = computed(() => {
+  return roadSelectionMode.value === 'ai' ? mutationAiStyleDetails : mutationHeteroStyleDetails
+})
+
+const mutationSummaryRows = computed(() => {
+  if (roadSelectionMode.value === 'ai') {
+    return [
+      [
+        { modelKey: 'aiRoad', label: 'AI熱力圖道路' },
+        { modelKey: 'aiTcode', label: '步登公寓垂直動線' }
+      ]
+    ]
+  }
+
+  return [
+    [
+      { modelKey: 'heteroRoof', label: '活動屋頂' },
+      { modelKey: 'heteroTcode', label: '步登公寓垂直動線' }
+    ],
+    [
+      { modelKey: 'heteroPatharea', label: '屋頂公共空間' },
+      { modelKey: 'heteroRoof1', label: '屋頂商業空間' }
+    ]
+  ]
+})
+
+const activeRapsModelKey = computed(() => {
+  return roadSelectionMode.value === 'ai' ? 'aiRaps' : 'heteroRaps'
+})
+
+const heteroSuggestedRangeText = computed(() => {
+  const base = Number(heteroActivityLength.value || 0)
+  return `${Math.max(0, base)} ~ ${Math.max(0, base + 500)}`
+})
+
+// =========================
+// 手動畫線資料
+// =========================
+const isDrawingManualPath = ref(false)
+const manualPathPoints = ref([])
+
+let manualPathGroup = null
+let raycaster = null
+let savedRoadSelectionView = null
+const pointerNdc = new THREE.Vector2()
+const drawingPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+
+// =========================
+// 圖例資料
+// =========================
+const visibleLegendItems = computed(() => {
+  if (currentStep.value === 1 && buildingGenerated.value) {
+    return [
+      {
+        key: 'building-step',
+        label: '步登公寓',
+        color: buildingStepStyle.color,
+        opacity: buildingStepStyle.opacity
+      },
+      {
+        key: 'building-normal',
+        label: '一般建築',
+        color: buildingNormalStyle.color,
+        opacity: buildingNormalStyle.opacity
+      }
+    ]
+  }
+
+  if (currentStep.value === 2 && roofSpaceGenerated.value) {
+    return [
+      {
+        key: 'roof-commercial',
+        label: '屋頂商業空間',
+        color: caModelStyle.roof1.color,
+        opacity: caModelStyle.roof1.opacity
+      },
+      {
+        key: 'roof-open',
+        label: '屋頂開放空間',
+        color: caModelStyle.roof0.color,
+        opacity: caModelStyle.roof0.opacity
+      },
+      {
+        key: 'roof-area',
+        label: '屋頂可用範圍',
+        color: roofAreaStyle.color,
+        opacity: roofAreaStyle.opacity
+      }
+    ]
+  }
+
+  if (currentStep.value === 3) {
+    const items = []
+
+    if (roadSelectionMode.value === 'ai') {
+      if (aiRoadModelGenerated.value) {
+        items.push({
+          key: 'ai-road',
+          label: 'AI熱力圖道路',
+          color: mutationModelStyles.aiRoad.color,
+          opacity: mutationModelStyles.aiRoad.opacity
+        })
+      }
+
+      if (heteroStreetConfirmed.value) {
+        items.push({
+          key: 'ai-tcode',
+          label: '步登公寓垂直動線',
+          color: mutationModelStyles.aiTcode.color,
+          opacity: mutationModelStyles.aiTcode.opacity
+        })
+      }
+
+      if (heteroPathGenerated.value) {
+        items.push({
+          key: 'ai-raps',
+          label: '活動路徑',
+          color: mutationModelStyles.aiRaps.color,
+          opacity: mutationModelStyles.aiRaps.opacity
+        })
+      }
+
+      return items
+    }
+
+    if (manualPathPoints.value.length >= 2 || heteroPathGenerated.value) {
+      items.push({
+        key: 'hetero-raps',
+        label: '活動路徑',
+        color: mutationModelStyles.heteroRaps.color,
+        opacity: mutationModelStyles.heteroRaps.opacity
+      })
+    }
+
+    if (heteroStreetConfirmed.value) {
+      items.push(
+        {
+          key: 'hetero-tcode',
+          label: '步登公寓垂直動線',
+          color: mutationModelStyles.heteroTcode.color,
+          opacity: mutationModelStyles.heteroTcode.opacity
+        },
+        {
+          key: 'hetero-patharea',
+          label: '屋頂公共空間',
+          color: mutationModelStyles.heteroPatharea.color,
+          opacity: mutationModelStyles.heteroPatharea.opacity
+        },
+        {
+          key: 'hetero-roof1',
+          label: '屋頂商業空間',
+          color: mutationModelStyles.heteroRoof1.color,
+          opacity: mutationModelStyles.heteroRoof1.opacity
+        }
+      )
+    }
+
+    return items
+  }
+
+  return []
+})
+
+// =========================
+// Three.js 場景變數
+// =========================
+let scene = null
+let camera = null
+let renderer = null
+let controls = null
+let animationId = null
+
+let overviewCamera = null
+let overviewRenderer = null
+
+let gridHelper = null
+let axesHelper = null
+let terrainModel = null
+let generatedBuilding = null
+let generatedBuildingN = null
+let roofAreaModel = null
+let roofCommercialModel = null
+let roofOpenModel = null
+let aiHeatmapPlane = null
+let aiRoadModel = null
+
+const mutationModelObjects = {}
+
+let sceneReady = false
+
+const GRID_SIZE = 400
+const GRID_DIVISIONS = 40
+
+const FLOOR_HEIGHT = 3
+const renewalFloorAreaRatio = ref(0)
+
+const initialCameraPosition = new THREE.Vector3(160, 120, 160)
+const initialTargetPosition = new THREE.Vector3(0, 20, 0)
+
+const canStart = computed(() => {
+  return userName.value.trim() !== '' && !!selectedFile.value
+})
+
+function setDebug(message) {
+  debugMessage.value = message
+  console.log('[RAPS DEBUG]', message)
+}
+
+function formatArea(value) {
+  return Number(value || 0).toFixed(2)
+}
+
+function formatPercent(value) {
+  return `${Number(value || 0).toFixed(1)}%`
+}
+
+function getMutationCount(modelKey) {
+  return mutationModelCounts.value[modelKey] || 0
+}
+
+function countMeshInObject(object) {
+  let count = 0
+
+  if (!object) return count
+
+  object.traverse((child) => {
+    if (child.isMesh) {
+      count += 1
+    }
+  })
+
+  return count
+}
+
+// =========================
+// 頁面切換
+// =========================
+function goNextStep() {
+  if (currentStep.value < TOTAL_STEPS) {
+    currentStep.value += 1
+  }
+}
+
+function goPrevStep() {
+  if (currentStep.value > 1) {
+    currentStep.value -= 1
+  }
+}
+
+// =========================
+// 檔案操作
+// =========================
+function openFilePicker() {
+  if (!fileInputRef.value) return
+  fileInputRef.value.value = ''
+  fileInputRef.value.click()
+}
+
+function handleInitialFile(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  selectedFile.value = file
+  selectedFileName.value = file.name
+  setDebug(`已選擇檔案：${file.name}`)
+}
+
+function handlePendingFile(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  pendingFile.value = file
+  pendingFileName.value = file.name
+  setDebug(`已選擇更新檔案：${file.name}`)
+}
+
+function handleFileChangeWrapper(event) {
+  if (showWelcomeModal.value) {
+    handleInitialFile(event)
+  } else {
+    handlePendingFile(event)
+  }
+}
+
+function openUpdateModal() {
+  if (showWelcomeModal.value) return
+
+  pendingFile.value = null
+  pendingFileName.value = ''
+  showUpdateModal.value = true
+}
+
+function closeUpdateModal() {
+  pendingFile.value = null
+  pendingFileName.value = ''
+  showUpdateModal.value = false
+}
+
+async function confirmUpdateFile() {
+  if (!pendingFile.value) return
+
+  if (!sceneReady) {
+    setDebug('場景尚未準備完成，無法更新檔案')
+    return
+  }
+
+  await loadModelFromFile(pendingFile.value, { preserveView: true })
+  closeUpdateModal()
+}
+
+function getFileExtension(fileName) {
+  if (!fileName) return ''
+
+  const ext = fileName.split('.').pop()
+  return ext ? ext.toLowerCase().trim() : ''
+}
+
+async function handleStart() {
+  if (!canStart.value) return
+
+  showWelcomeModal.value = false
+  await nextTick()
+
+  if (!sceneReady) {
+    initScene()
+  }
+
+  if (!sceneReady) {
+    setDebug('場景初始化失敗，無法載入模型')
+    return
+  }
+
+  await loadModelFromFile(selectedFile.value, { preserveView: false })
+}
+
+// =========================
+// 場景初始化
+// =========================
+function initScene() {
+  if (sceneReady) {
+    setDebug('場景已存在')
+    return
+  }
+
+  const container = containerRef.value
+  if (!container) {
+    setDebug('containerRef 為空，場景建立失敗')
+    return
+  }
+
+  scene = new THREE.Scene()
+  scene.background = new THREE.Color(0xf5f5f5)
+
+  const width = Math.max(container.clientWidth, 1)
+  const height = Math.max(container.clientHeight, 1)
+
+  camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 5000)
+  camera.position.copy(initialCameraPosition)
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  renderer.setSize(width, height)
+  renderer.outputColorSpace = THREE.SRGBColorSpace
+
+  container.innerHTML = ''
+  container.appendChild(renderer.domElement)
+
+  raycaster = new THREE.Raycaster()
+  renderer.domElement.addEventListener('pointerdown', handleManualPathPointerDown)
+
+  controls = new OrbitControls(camera, renderer.domElement)
+  controls.enableDamping = true
+  controls.target.copy(initialTargetPosition)
+  controls.update()
+
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.35)
+  scene.add(ambientLight)
+
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.1)
+  directionalLight.position.set(120, 160, 100)
+  scene.add(directionalLight)
+
+  gridHelper = new THREE.GridHelper(GRID_SIZE, GRID_DIVISIONS, 0x999999, 0xcccccc)
+  gridHelper.position.set(0, 0, 0)
+  scene.add(gridHelper)
+
+  axesHelper = new THREE.AxesHelper(80)
+  scene.add(axesHelper)
+
+  initOverviewScene()
+
+  sceneReady = true
+  animate()
+  window.addEventListener('resize', onWindowResize)
+
+  setDebug('three 場景初始化完成')
+}
+
+function initOverviewScene() {
+  const overviewContainer = overviewRef.value
+  if (!overviewContainer) return
+
+  const size = Math.max(overviewContainer.clientWidth, 1)
+  const halfRange = GRID_SIZE * 0.7
+
+  overviewCamera = new THREE.OrthographicCamera(
+    -halfRange,
+    halfRange,
+    halfRange,
+    -halfRange,
+    0.1,
+    5000
+  )
+
+  overviewCamera.position.set(0, 600, 0)
+  overviewCamera.up.set(0, 0, -1)
+  overviewCamera.lookAt(0, 0, 0)
+
+  overviewRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  overviewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+  overviewRenderer.setSize(size, size)
+  overviewRenderer.outputColorSpace = THREE.SRGBColorSpace
+
+  overviewContainer.innerHTML = ''
+  overviewContainer.appendChild(overviewRenderer.domElement)
+}
+
+function animate() {
+  animationId = requestAnimationFrame(animate)
+
+  if (controls) {
+    controls.update()
+  }
+
+  if (renderer && scene && camera) {
+    renderer.render(scene, camera)
+  }
+
+  if (overviewRenderer && scene && overviewCamera) {
+    overviewRenderer.render(scene, overviewCamera)
+  }
+}
+
+function onWindowResize() {
+  const container = containerRef.value
+  if (!container || !camera || !renderer) return
+
+  const width = Math.max(container.clientWidth, 1)
+  const height = Math.max(container.clientHeight, 1)
+
+  camera.aspect = width / height
+  camera.updateProjectionMatrix()
+  renderer.setSize(width, height)
+
+  const overviewContainer = overviewRef.value
+  if (overviewContainer && overviewRenderer && overviewCamera) {
+    const overviewSize = Math.max(overviewContainer.clientWidth, 1)
+    overviewRenderer.setSize(overviewSize, overviewSize)
+    overviewCamera.updateProjectionMatrix()
+  }
+}
+
+// =========================
+// 模型載入
+// =========================
+async function loadModelFromFile(file, options = { preserveView: true }) {
+  if (!file) {
+    setDebug('未選擇檔案')
+    return
+  }
+
+  if (!sceneReady || !scene) {
+    setDebug('scene 尚未建立')
+    return
+  }
+
+  const { preserveView = true } = options
+  const extension = getFileExtension(file.name)
+
+  setDebug(`開始載入：${file.name}`)
+
+  clearProjectModels()
+  currentStep.value = 1
+
+  try {
+    if (extension === 'glb' || extension === 'gltf') {
+      terrainModel = await loadGlbFile(file)
+    } else if (extension === 'dxf') {
+      terrainModel = await loadDxfFile(file)
+    } else {
+      throw new Error(`不支援的檔案格式：.${extension}`)
+    }
+
+    if (!terrainModel) {
+      throw new Error('模型物件為空')
+    }
+
+    currentModelName.value = file.name
+    fitModelToGridBoundary(terrainModel)
+
+    // DXF 左右水平反轉
+    if (extension === 'dxf') {
+      terrainModel.scale.x *= -1
+      terrainModel.updateMatrixWorld(true)
+    }
+
+    scene.add(terrainModel)
+
+    if (!preserveView) {
+      resetView()
+      focusCameraOnObject(terrainModel)
+    }
+
+    setDebug(`載入完成：${file.name}`)
+  } catch (error) {
+    console.error('模型載入失敗:', error)
+    setDebug(`模型載入失敗：${error.message || error}`)
+    alert(`模型載入失敗：${error.message || error}`)
+  }
+}
+
+function loadGlbFile(file) {
+  return new Promise((resolve, reject) => {
+    const loader = new GLTFLoader()
+    const fileUrl = URL.createObjectURL(file)
+
+    loader.load(
+      fileUrl,
+      (gltf) => {
+        const root = gltf.scene
+
+        root.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true
+            child.receiveShadow = true
+          }
+        })
+
+        URL.revokeObjectURL(fileUrl)
+        resolve(root)
+      },
+      undefined,
+      (error) => {
+        URL.revokeObjectURL(fileUrl)
+        reject(error)
+      }
+    )
+  })
+}
+
+function loadStaticGlbModel(path) {
+  return new Promise((resolve, reject) => {
+    const loader = new GLTFLoader()
+
+    loader.load(
+      path,
+      (gltf) => resolve(gltf.scene),
+      undefined,
+      async (error) => {
+        console.error('GLB 載入失敗：', path, error)
+
+        try {
+          const response = await fetch(path)
+          const text = await response.text()
+
+          if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+            reject(new Error(`模型路徑錯誤或檔案不存在：${path}`))
+            return
+          }
+        } catch (fetchError) {
+          console.error(fetchError)
+        }
+
+        reject(error)
+      }
+    )
+  })
+}
+
+
+async function loadStaticGlbModelWithFallback(paths) {
+  let lastError = null
+
+  for (const path of paths) {
+    try {
+      const model = await loadStaticGlbModel(path)
+      return model
+    } catch (error) {
+      lastError = error
+      console.warn(`模型載入失敗，改試下一個路徑：${path}`, error)
+    }
+  }
+
+  throw lastError || new Error('模型載入失敗')
+}
+
+async function loadDxfFile(file) {
+  return new Promise((resolve, reject) => {
+    const loader = new DXFLoader()
+    const fileUrl = URL.createObjectURL(file)
+
+    try {
+      loader.setConsumeUnits?.(true)
+      loader.setDefaultColor?.(0x111111)
+      loader.setEnableLayer?.(true)
+    } catch (configError) {
+      console.warn('DXF loader 設定略過：', configError)
+    }
+
+    loader.load(
+      fileUrl,
+      (data) => {
+        try {
+          const root = data?.entity || data?.entities || data
+
+          if (!root) {
+            URL.revokeObjectURL(fileUrl)
+            reject(new Error('DXF 載入成功，但沒有可顯示的 entity'))
+            return
+          }
+
+          root.name = 'DXF_ROOT'
+          root.rotation.x = -Math.PI / 2
+          root.rotation.y = Math.PI
+          root.updateMatrixWorld(true)
+
+          const rawBox = new THREE.Box3().setFromObject(root)
+          const rawSize = rawBox.getSize(new THREE.Vector3())
+
+          if (rawSize.length() === 0) {
+            URL.revokeObjectURL(fileUrl)
+            reject(new Error('DXF 有載入，但尺寸為 0，可能是空檔或圖層內容不支援'))
+            return
+          }
+
+          URL.revokeObjectURL(fileUrl)
+          resolve(root)
+        } catch (innerError) {
+          URL.revokeObjectURL(fileUrl)
+          reject(innerError)
+        }
+      },
+      undefined,
+      (error) => {
+        URL.revokeObjectURL(fileUrl)
+        console.error('DXF 載入失敗：', error)
+        reject(new Error('DXF 格式不支援，請將檔案另存為 AutoCAD R2000 DXF 後再試一次'))
+      }
+    )
+  })
+}
+
+// =========================
+// 第一頁功能
+// =========================
+async function insertGeneratedBuilding() {
+  if (!sceneReady || !scene) {
+    setDebug('場景尚未準備完成')
+    return
+  }
+
+  if (!terrainModel) {
+    setDebug('請先載入地形圖')
+    return
+  }
+
+  try {
+    clearGeneratedBuildingModels()
+
+    const mainModel = await loadStaticGlbModel('/models/model-arch.glb')
+    const normalModel = await loadStaticGlbModel('/models/model-arch-n.glb')
+
+    generatedBuilding = mainModel
+    generatedBuilding.name = 'generated-building-step'
+
+    generatedBuildingN = normalModel
+    generatedBuildingN.name = 'generated-building-normal'
+
+    applyModelVisualStyle(generatedBuilding, buildingStepStyle)
+    applyModelVisualStyle(generatedBuildingN, buildingNormalStyle)
+
+    fitGeneratedBuildingToScene(generatedBuilding)
+    fitGeneratedBuildingToScene(generatedBuildingN)
+
+    scene.add(generatedBuilding)
+    scene.add(generatedBuildingN)
+
+    stepApartmentCount.value = countMeshInObject(generatedBuilding)
+    normalBuildingCount.value = countMeshInObject(generatedBuildingN)
+
+    updateRenewalFloorAreaRatio()
+
+    setDebug('已置入 model-arch.glb 與 model-arch-n.glb')
+  } catch (error) {
+    console.error(error)
+    setDebug(`建物生成失敗：${error.message || error}`)
+    alert(`建物生成失敗：${error.message || error}`)
+  }
+}
+
+// =========================
+// 第二頁功能
+// =========================
+async function insertRoofSpace() {
+  if (!sceneReady || !scene) {
+    setDebug('場景尚未準備完成')
+    return
+  }
+
+  if (!terrainModel) {
+    setDebug('請先載入地形圖')
+    return
+  }
+
+  try {
+    clearRoofSpaceModels()
+
+    roofSpaceGenerated.value = false
+    roofUsableArea.value = 0
+    roofCommercialArea.value = 0
+    roofOpenArea.value = 0
+
+    roofAreaModel = await loadStaticGlbModel('/models/model-roofarea.glb')
+    roofCommercialModel = await loadStaticGlbModel('/models/model-ca-roof1.glb')
+    roofOpenModel = await loadStaticGlbModel('/models/model-ca-roof0.glb')
+
+    roofAreaModel.name = 'generated-roof-area'
+    roofCommercialModel.name = 'roof-commercial-space'
+    roofOpenModel.name = 'roof-open-space'
+
+    applyModelVisualStyle(roofAreaModel, roofAreaStyle)
+    applyModelVisualStyle(roofCommercialModel, caModelStyle.roof1)
+    applyModelVisualStyle(roofOpenModel, caModelStyle.roof0)
+
+    fitGeneratedBuildingToScene(roofAreaModel, {
+      preserveOriginalY: true
+    })
+
+    applyTransformFromReference(roofCommercialModel, roofAreaModel)
+    applyTransformFromReference(roofOpenModel, roofAreaModel)
+
+    scene.add(roofAreaModel)
+    scene.add(roofCommercialModel)
+    scene.add(roofOpenModel)
+
+    roofUsableArea.value = computeObjectTopProjectedAreaXZ(roofAreaModel)
+    roofCommercialArea.value = computeObjectTopProjectedAreaXZ(roofCommercialModel)
+    roofOpenArea.value = computeObjectTopProjectedAreaXZ(roofOpenModel)
+
+    roofSpaceGenerated.value = true
+    updateRenewalFloorAreaRatio()
+
+    setDebug(`已生成屋頂空間｜屋頂可用面積 ${formatArea(roofUsableArea.value)} m²`)
+  } catch (error) {
+    console.error(error)
+    setDebug(`屋頂空間生成失敗：${error.message || error}`)
+    alert(`屋頂空間生成失敗：${error.message || error}`)
+  }
+}
+
+// =========================
+// 第三頁功能：手動畫線與異質變異
+// =========================
+async function generateAiHeatmap() {
+  roadSelectionMode.value = 'ai'
+  aiHeatmapVisible.value = true
+  isDrawingManualPath.value = false
+
+  if (controls) {
+    controls.enabled = true
+  }
+
+  clearManualPath({
+    keepRoadSelection: true,
+    keepAiHeatmap: true
+  })
+
+  roadSelectionMode.value = 'ai'
+  aiHeatmapVisible.value = true
+  createAiHeatmapPlane()
+
+  const aiRoadLoaded = await insertAiRoadModel()
+
+  setViewerToTopPlanView()
+
+  if (aiRoadLoaded) {
+    setDebug('已導入 AI 熱力圖與 AI 道路模型：/model-EACHVA-AI-road-AB.glb')
+  } else {
+    setDebug('已導入 AI 熱力圖，但 AI 道路模型載入失敗，請確認 GLB 路徑')
+  }
+}
+
+function clearAiHeatmapPlane() {
+  if (aiHeatmapPlane && scene) {
+    scene.remove(aiHeatmapPlane)
+    disposeObject(aiHeatmapPlane)
+    aiHeatmapPlane = null
+  }
+}
+
+function clearAiRoadModel() {
+  if (aiRoadModel && scene) {
+    scene.remove(aiRoadModel)
+    disposeObject(aiRoadModel)
+    aiRoadModel = null
+  }
+
+  aiRoadModelGenerated.value = false
+  mutationModelCounts.value.aiRoad = 0
+}
+
+async function insertAiRoadModel() {
+  if (!sceneReady || !scene) {
+    setDebug('場景尚未準備完成，無法置入 AI 道路模型')
+    return false
+  }
+
+  try {
+    clearAiRoadModel()
+
+    const model = await loadStaticGlbModelWithFallback([
+      '/model-EACHVA-AI-road-AB.glb',
+      '/models/model-EACHVA-AI-road-AB.glb'
+    ])
+
+    aiRoadModel = model
+    aiRoadModel.name = 'ai-road-selection-model'
+
+    applyModelVisualStyle(aiRoadModel, mutationModelStyles.aiRoad)
+
+    fitGeneratedBuildingToScene(aiRoadModel, {
+      preserveOriginalY: true
+    })
+
+    scene.add(aiRoadModel)
+    aiRoadModelGenerated.value = true
+    mutationModelCounts.value.aiRoad = countMeshInObject(aiRoadModel)
+
+    return true
+  } catch (error) {
+    console.error(error)
+    clearAiRoadModel()
+    setDebug(`AI 道路模型載入失敗：${error.message || error}`)
+    return false
+  }
+}
+
+async function insertAiTcodeModel() {
+  if (!sceneReady || !scene) {
+    setDebug('場景尚未準備完成，無法置入 AI 垂直動線模型')
+    return false
+  }
+
+  try {
+    if (mutationModelObjects.aiTcode) {
+      scene.remove(mutationModelObjects.aiTcode)
+      disposeObject(mutationModelObjects.aiTcode)
+      delete mutationModelObjects.aiTcode
+    }
+
+    const model = await loadStaticGlbModelWithFallback([
+      '/model-EACHVA-AI-tcode-AB.glb',
+      '/models/model-EACHVA-AI-tcode-AB.glb'
+    ])
+
+    mutationModelObjects.aiTcode = model
+    model.name = 'ai-tcode-model'
+
+    applyModelVisualStyle(model, mutationModelStyles.aiTcode)
+
+    if (aiRoadModel) {
+      applyTransformFromReference(model, aiRoadModel)
+    } else {
+      fitGeneratedBuildingToScene(model, {
+        preserveOriginalY: true
+      })
+    }
+
+    scene.add(model)
+    mutationModelCounts.value.aiTcode = countMeshInObject(model)
+
+    return true
+  } catch (error) {
+    console.error(error)
+    setDebug(`AI 垂直動線模型載入失敗：${error.message || error}`)
+    return false
+  }
+}
+
+function createAiHeatmapPlane() {
+  if (!sceneReady || !scene) {
+    setDebug('場景尚未準備完成，無法貼上 AI 熱力圖')
+    return
+  }
+
+  clearAiHeatmapPlane()
+
+  const textureLoader = new THREE.TextureLoader()
+
+  textureLoader.load(
+    aiHeatmapImageSrc,
+    (texture) => {
+      texture.colorSpace = THREE.SRGBColorSpace
+
+      let center = new THREE.Vector3(0, 0, 0)
+      let width = GRID_SIZE * 0.92
+      let depth = GRID_SIZE * 0.92
+      let planeY = 0.05
+
+      if (terrainModel) {
+        const terrainBox = new THREE.Box3().setFromObject(terrainModel)
+        const terrainSize = terrainBox.getSize(new THREE.Vector3())
+
+        if (terrainSize.length() > 0) {
+          center = terrainBox.getCenter(new THREE.Vector3())
+          width = Math.max(terrainSize.x, 1)
+          depth = Math.max(terrainSize.z, 1)
+          planeY = terrainBox.min.y + 0.08
+        }
+      }
+
+      const geometry = new THREE.PlaneGeometry(width, depth)
+      const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      })
+
+      aiHeatmapPlane = new THREE.Mesh(geometry, material)
+      aiHeatmapPlane.name = 'ai-heatmap-plane'
+      aiHeatmapPlane.rotation.x = -Math.PI / 2
+      aiHeatmapPlane.position.set(center.x, planeY, center.z)
+      aiHeatmapPlane.renderOrder = 2
+      aiHeatmapPlane.updateMatrixWorld(true)
+
+      scene.add(aiHeatmapPlane)
+      setDebug('AI 熱力圖已貼到右側預覽窗平面上')
+    },
+    undefined,
+    (error) => {
+      console.error(error)
+      setDebug('AI 熱力圖載入失敗，請確認 public/map/AI.png 是否存在')
+    }
+  )
+}
+
+function openManualRoadSelection() {
+  roadSelectionMode.value = 'manual'
+  aiHeatmapVisible.value = false
+  clearAiHeatmapPlane()
+
+  clearManualPath({
+    keepRoadSelection: true,
+    keepAiHeatmap: false
+  })
+
+  roadSelectionMode.value = 'manual'
+  setViewerToTopPlanView()
+  setDebug('已開啟手動道路選擇小分頁，右側預覽窗已切換為平面操作視角')
+}
+
+function saveRoadSelectionViewerState() {
+  if (!camera || !controls) return
+  if (savedRoadSelectionView) return
+
+  savedRoadSelectionView = {
+    position: camera.position.clone(),
+    up: camera.up.clone(),
+    target: controls.target.clone(),
+    near: camera.near,
+    far: camera.far,
+    zoom: camera.zoom
+  }
+}
+
+function restoreRoadSelectionViewerState() {
+  if (!camera || !controls) return
+
+  if (!savedRoadSelectionView) {
+    camera.up.set(0, 1, 0)
+    camera.position.copy(initialCameraPosition)
+    controls.target.copy(initialTargetPosition)
+    camera.near = 0.1
+    camera.far = 5000
+    camera.zoom = 1
+    camera.updateProjectionMatrix()
+    controls.update()
+    return
+  }
+
+  camera.position.copy(savedRoadSelectionView.position)
+  camera.up.copy(savedRoadSelectionView.up)
+  controls.target.copy(savedRoadSelectionView.target)
+  camera.near = savedRoadSelectionView.near
+  camera.far = savedRoadSelectionView.far
+  camera.zoom = savedRoadSelectionView.zoom
+  camera.updateProjectionMatrix()
+  controls.update()
+
+  savedRoadSelectionView = null
+}
+
+function setViewerToTopPlanView() {
+  if (!camera || !controls) return
+
+  // 只在按下 AI / 手動選擇時切換一次平面操作視角。
+  // 之後使用者旋轉、拖曳、縮放後，不再於確定時還原或重置視角。
+  savedRoadSelectionView = null
+
+  let center = new THREE.Vector3(0, 0, 0)
+  let size = new THREE.Vector3(GRID_SIZE, 1, GRID_SIZE)
+
+  if (terrainModel) {
+    const box = new THREE.Box3().setFromObject(terrainModel)
+    const boxSize = box.getSize(new THREE.Vector3())
+
+    if (boxSize.length() > 0) {
+      center = box.getCenter(new THREE.Vector3())
+      size = boxSize
+    }
+  }
+
+  const distance = Math.max(size.x, size.z, GRID_SIZE) * 1.28
+  const direction = new THREE.Vector3(0.28, 1.55, 0.28).normalize()
+
+  // 平面操作視角，但保留一般 3D OrbitControls 的 up 設定，旋轉時不會亂掉。
+  camera.up.set(0, 1, 0)
+  camera.position.copy(center.clone().add(direction.multiplyScalar(distance)))
+  controls.target.copy(center)
+  controls.enabled = true
+  camera.near = 0.1
+  camera.far = Math.max(5000, distance * 6)
+  camera.updateProjectionMatrix()
+  controls.update()
+}
+
+function startManualPathDrawing() {
+  if (!sceneReady || !scene || !camera || !renderer) {
+    setDebug('場景尚未準備完成，無法繪製路徑')
+    return
+  }
+
+  roadSelectionMode.value = 'manual'
+  aiHeatmapVisible.value = false
+  isDrawingManualPath.value = true
+  setViewerToTopPlanView()
+
+  if (controls) {
+    controls.enabled = true
+  }
+
+  setDebug('已進入線段繪製模式：請在右側預覽窗點選路徑點，也可直接旋轉、拖曳、縮放視角')
+}
+
+function resetManualPathDrawing() {
+  roadSelectionMode.value = 'manual'
+
+  clearManualPath({
+    keepRoadSelection: true,
+    keepAiHeatmap: false
+  })
+
+  roadSelectionMode.value = 'manual'
+  startManualPathDrawing()
+}
+
+function mockSelectStreetLine() {
+  startManualPathDrawing()
+}
+
+function getManualDrawingPlaneY() {
+  if (!terrainModel) return 0
+
+  const box = new THREE.Box3().setFromObject(terrainModel)
+
+  if (!Number.isFinite(box.min.y)) return 0
+
+  return box.min.y + 0.35
+}
+
+function getPointerPointOnDrawingPlane(event) {
+  if (!renderer || !camera || !raycaster) return null
+
+  const rect = renderer.domElement.getBoundingClientRect()
+
+  pointerNdc.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+  pointerNdc.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+
+  raycaster.setFromCamera(pointerNdc, camera)
+
+  const planeY = getManualDrawingPlaneY()
+  drawingPlane.set(new THREE.Vector3(0, 1, 0), -planeY)
+
+  const point = new THREE.Vector3()
+  const hit = raycaster.ray.intersectPlane(drawingPlane, point)
+
+  return hit ? point : null
+}
+
+function handleManualPathPointerDown(event) {
+  if (!isDrawingManualPath.value) return
+  if (event.button !== 0) return
+
+  const point = getPointerPointOnDrawingPlane(event)
+  if (!point) return
+
+  manualPathPoints.value = [
+    ...manualPathPoints.value,
+    point.clone()
+  ]
+
+  rebuildManualPathPreview()
+
+  setDebug(`已新增第 ${manualPathPoints.value.length} 個路徑點`)
+}
+
+function createPathCylinderBetweenPoints(startPoint, endPoint) {
+  const direction = new THREE.Vector3().subVectors(endPoint, startPoint)
+  const length = direction.length()
+
+  if (length <= 0.001) return null
+
+  const geometry = new THREE.CylinderGeometry(0.55, 0.55, length, 12)
+  const material = new THREE.MeshStandardMaterial({
+    color: manualPathStyle.color,
+    transparent: true,
+    opacity: manualPathStyle.opacity,
+    side: THREE.DoubleSide
+  })
+
+  const cylinder = new THREE.Mesh(geometry, material)
+
+  cylinder.position.copy(startPoint).add(endPoint).multiplyScalar(0.5)
+  cylinder.quaternion.setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    direction.clone().normalize()
+  )
+
+  return cylinder
+}
+
+function createPathPointMarker(point) {
+  const geometry = new THREE.SphereGeometry(1.6, 16, 16)
+  const material = new THREE.MeshStandardMaterial({
+    color: manualPathStyle.color,
+    transparent: true,
+    opacity: manualPathStyle.opacity
+  })
+
+  const sphere = new THREE.Mesh(geometry, material)
+  sphere.position.copy(point)
+
+  return sphere
+}
+
+function rebuildManualPathPreview() {
+  if (!scene) return
+
+  if (manualPathGroup) {
+    scene.remove(manualPathGroup)
+    disposeObject(manualPathGroup)
+    manualPathGroup = null
+  }
+
+  manualPathGroup = new THREE.Group()
+  manualPathGroup.name = 'manual-drawn-path'
+
+  const points = manualPathPoints.value
+
+  points.forEach((point) => {
+    const marker = createPathPointMarker(point)
+    manualPathGroup.add(marker)
+  })
+
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const segment = createPathCylinderBetweenPoints(points[i], points[i + 1])
+
+    if (segment) {
+      manualPathGroup.add(segment)
+    }
+  }
+
+  scene.add(manualPathGroup)
+}
+
+function clearManualPath(options = {}) {
+  const {
+    keepRoadSelection = false,
+    keepAiHeatmap = false
+  } = options
+
+  isDrawingManualPath.value = false
+  manualPathPoints.value = []
+
+  if (!keepAiHeatmap) {
+    aiHeatmapVisible.value = false
+    clearAiHeatmapPlane()
+    clearAiRoadModel()
+  }
+
+  if (!keepRoadSelection) {
+    roadSelectionMode.value = ''
+  }
+
+  if (controls) {
+    controls.enabled = true
+  }
+
+  if (manualPathGroup && scene) {
+    scene.remove(manualPathGroup)
+    disposeObject(manualPathGroup)
+    manualPathGroup = null
+  }
+
+  clearMutationModels()
+  resetMutationCounts()
+
+  heteroStreetConfirmed.value = false
+  heteroPathGenerated.value = false
+
+  setDebug('已清除手動路徑與異質變異模型')
+}
+
+async function confirmHeteroStreet() {
+  if (!sceneReady || !scene) {
+    setDebug('場景尚未準備完成')
+    return
+  }
+
+  if (!roadSelectionMode.value) {
+    setDebug('請先選擇 AI 熱力圖生成或手動選擇')
+    return
+  }
+
+  if (roadSelectionMode.value === 'manual' && manualPathPoints.value.length < 2) {
+    setDebug('請先用「線段選擇」在右側平面視圖至少點選 2 個點')
+    return
+  }
+
+  isDrawingManualPath.value = false
+
+  if (controls) {
+    controls.enabled = true
+  }
+
+  try {
+    clearMutationModels()
+    resetMutationCounts()
+    heteroPathGenerated.value = false
+
+    if (roadSelectionMode.value === 'ai') {
+      if (!aiRoadModel) {
+        await insertAiRoadModel()
+      } else {
+        mutationModelCounts.value.aiRoad = countMeshInObject(aiRoadModel)
+      }
+
+      await insertAiTcodeModel()
+    } else {
+      await loadMutationModels([
+        { key: 'heteroRoof', path: '/models/model-EACHVA-roof-AB.glb' },
+        { key: 'heteroTcode', path: '/models/model-EACHVA-tcode-AB.glb' },
+        { key: 'heteroRoof1', path: '/models/model-EACHVA-roof1-AB.glb' },
+        { key: 'heteroPatharea', path: '/models/model-EACHVA-patharea-AB.glb' }
+      ])
+
+      rebuildManualPathPreview()
+    }
+
+    heteroStreetConfirmed.value = true
+
+    // 確認後不還原視角，保留使用者在平面操作視角中旋轉、拖曳、縮放後的狀態。
+    savedRoadSelectionView = null
+
+    if (roadSelectionMode.value === 'ai') {
+      setDebug('已確認 AI 熱力圖道路選擇，並載入 AI 垂直動線模型')
+    } else {
+      setDebug('已確認手動路徑，並載入異質變異基礎模型')
+    }
+  } catch (error) {
+    console.error(error)
+    setDebug(`異質變異基礎模型載入失敗：${error.message || error}`)
+    alert(`異質變異基礎模型載入失敗：${error.message || error}`)
+  }
+}
+
+async function generateHeteroPath() {
+  if (!sceneReady || !scene) {
+    setDebug('場景尚未準備完成')
+    return
+  }
+
+  try {
+    ;['heteroRaps', 'aiRaps'].forEach((key) => {
+      if (mutationModelObjects[key]) {
+        scene.remove(mutationModelObjects[key])
+        disposeObject(mutationModelObjects[key])
+        delete mutationModelObjects[key]
+      }
+    })
+
+    const isAiMode = roadSelectionMode.value === 'ai'
+    const modelKey = isAiMode ? 'aiRaps' : 'heteroRaps'
+    const model = isAiMode
+      ? await loadStaticGlbModelWithFallback([
+        '/model-EACHVA-AI-RAPS-AB.glb',
+        '/models/model-EACHVA-AI-RAPS-AB.glb'
+      ])
+      : await loadStaticGlbModel('/models/model-EACHVA-RAPS-AB.glb')
+
+    mutationModelObjects[modelKey] = model
+    applyModelVisualStyle(model, isAiMode ? mutationModelStyles.aiRaps : mutationModelStyles.heteroRaps)
+
+    const reference = isAiMode
+      ? (aiRoadModel || mutationModelObjects.aiTcode)
+      : (
+        mutationModelObjects.heteroRoof ||
+        mutationModelObjects.heteroTcode ||
+        mutationModelObjects.heteroRoof1 ||
+        mutationModelObjects.heteroPatharea
+      )
+
+    if (reference) {
+      applyTransformFromReference(model, reference)
+    } else {
+      fitGeneratedBuildingToScene(model, {
+        preserveOriginalY: true
+      })
+    }
+
+    scene.add(model)
+    mutationModelCounts.value[modelKey] = countMeshInObject(model)
+    heteroPathGenerated.value = true
+
+    if (isAiMode) {
+      setDebug(`已生成 AI 熱力圖活動路徑｜活動長度 ${heteroActivityLength.value}`)
+    } else {
+      setDebug(`已生成異質變異路徑｜活動長度 ${heteroActivityLength.value}`)
+    }
+  } catch (error) {
+    console.error(error)
+    setDebug(`異質變異路徑生成失敗：${error.message || error}`)
+    alert(`異質變異路徑生成失敗：${error.message || error}`)
+  }
+}
+
+async function loadMutationModels(modelConfigs) {
+  let referenceModel = null
+
+  for (const config of modelConfigs) {
+    const model = await loadStaticGlbModel(config.path)
+    mutationModelObjects[config.key] = model
+    applyModelVisualStyle(model, mutationModelStyles[config.key])
+
+    if (!referenceModel) {
+      fitGeneratedBuildingToScene(model, {
+        preserveOriginalY: true
+      })
+      referenceModel = model
+    } else {
+      applyTransformFromReference(model, referenceModel)
+    }
+
+    scene.add(model)
+    mutationModelCounts.value[config.key] = countMeshInObject(model)
+  }
+}
+
+// =========================
+// 面積 / 體積計算
+// =========================
+function signedVolumeOfTriangle(p1, p2, p3) {
+  return p1.dot(p2.clone().cross(p3)) / 6
+}
+
+function computeMeshVolume(mesh) {
+  const geometry = mesh.geometry
+  if (!geometry || !geometry.attributes?.position) return 0
+
+  const pos = geometry.attributes.position
+  const index = geometry.index
+  let volume = 0
+
+  mesh.updateWorldMatrix(true, false)
+  const matrix = mesh.matrixWorld
+
+  const p1 = new THREE.Vector3()
+  const p2 = new THREE.Vector3()
+  const p3 = new THREE.Vector3()
+
+  if (index) {
+    for (let i = 0; i < index.count; i += 3) {
+      const a = index.getX(i)
+      const b = index.getX(i + 1)
+      const c = index.getX(i + 2)
+
+      p1.fromBufferAttribute(pos, a).applyMatrix4(matrix)
+      p2.fromBufferAttribute(pos, b).applyMatrix4(matrix)
+      p3.fromBufferAttribute(pos, c).applyMatrix4(matrix)
+
+      volume += signedVolumeOfTriangle(p1, p2, p3)
+    }
+  } else {
+    for (let i = 0; i < pos.count; i += 3) {
+      p1.fromBufferAttribute(pos, i).applyMatrix4(matrix)
+      p2.fromBufferAttribute(pos, i + 1).applyMatrix4(matrix)
+      p3.fromBufferAttribute(pos, i + 2).applyMatrix4(matrix)
+
+      volume += signedVolumeOfTriangle(p1, p2, p3)
+    }
+  }
+
+  return Math.abs(volume)
+}
+
+function computeObjectVolume(object) {
+  let totalVolume = 0
+
+  if (!object) return totalVolume
+
+  object.updateMatrixWorld(true)
+
+  object.traverse((child) => {
+    if (child.isMesh) {
+      totalVolume += computeMeshVolume(child)
+    }
+  })
+
+  return totalVolume
+}
+
+function triangleAreaXZ(p1, p2, p3) {
+  const ax = p2.x - p1.x
+  const az = p2.z - p1.z
+  const bx = p3.x - p1.x
+  const bz = p3.z - p1.z
+
+  return Math.abs((ax * bz - az * bx) * 0.5)
+}
+
+function computeMeshTopProjectedAreaXZ(mesh) {
+  const geometry = mesh.geometry
+  if (!geometry || !geometry.attributes?.position) return 0
+
+  const pos = geometry.attributes.position
+  const index = geometry.index
+
+  mesh.updateWorldMatrix(true, false)
+  const matrix = mesh.matrixWorld
+
+  const p1 = new THREE.Vector3()
+  const p2 = new THREE.Vector3()
+  const p3 = new THREE.Vector3()
+  const edgeA = new THREE.Vector3()
+  const edgeB = new THREE.Vector3()
+  const normal = new THREE.Vector3()
+
+  let upArea = 0
+  let downArea = 0
+  let projectedArea = 0
+
+  const readTriangle = (a, b, c) => {
+    p1.fromBufferAttribute(pos, a).applyMatrix4(matrix)
+    p2.fromBufferAttribute(pos, b).applyMatrix4(matrix)
+    p3.fromBufferAttribute(pos, c).applyMatrix4(matrix)
+
+    const area = triangleAreaXZ(p1, p2, p3)
+    projectedArea += area
+
+    edgeA.subVectors(p2, p1)
+    edgeB.subVectors(p3, p1)
+    normal.crossVectors(edgeA, edgeB).normalize()
+
+    if (normal.y > 0.55) {
+      upArea += area
+    } else if (normal.y < -0.55) {
+      downArea += area
+    }
+  }
+
+  if (index) {
+    for (let i = 0; i < index.count; i += 3) {
+      readTriangle(index.getX(i), index.getX(i + 1), index.getX(i + 2))
+    }
+  } else {
+    for (let i = 0; i < pos.count; i += 3) {
+      readTriangle(i, i + 1, i + 2)
+    }
+  }
+
+  if (upArea > 0) return upArea
+  if (downArea > 0) return downArea
+  return projectedArea
+}
+
+function computeObjectTopProjectedAreaXZ(object) {
+  let totalArea = 0
+
+  if (!object) return totalArea
+
+  object.updateMatrixWorld(true)
+
+  object.traverse((child) => {
+    if (child.isMesh) {
+      totalArea += computeMeshTopProjectedAreaXZ(child)
+    }
+  })
+
+  return totalArea
+}
+
+function updateRenewalFloorAreaRatio() {
+  if (!generatedBuilding || !roofAreaModel) {
+    renewalFloorAreaRatio.value = 0
+    return
+  }
+
+  const archVolume = computeObjectVolume(generatedBuilding)
+  const totalFloorArea = archVolume / FLOOR_HEIGHT
+  const roofProjectedArea = computeObjectTopProjectedAreaXZ(roofAreaModel)
+
+  renewalFloorAreaRatio.value = roofProjectedArea > 0 ? totalFloorArea / roofProjectedArea : 0
+}
+
+// =========================
+// 模型樣式 / 對位
+// =========================
+function applyModelVisualStyle(model, styleConfig) {
+  if (!model || !styleConfig) return
+
+  model.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true
+      child.receiveShadow = true
+
+      child.material = new THREE.MeshStandardMaterial({
+        color: styleConfig.color,
+        transparent: true,
+        opacity: styleConfig.opacity,
+        side: THREE.DoubleSide
+      })
+    }
+  })
+}
+
+function applyTransformFromReference(model, referenceModel, extraOffset = {}) {
+  if (!model || !referenceModel) return
+
+  const { offsetX = 0, offsetY = 0, offsetZ = 0 } = extraOffset
+
+  model.scale.copy(referenceModel.scale)
+  model.rotation.copy(referenceModel.rotation)
+  model.position.copy(referenceModel.position)
+
+  model.position.x += offsetX
+  model.position.y += offsetY
+  model.position.z += offsetZ
+
+  model.updateMatrixWorld(true)
+}
+
+function fitGeneratedBuildingToScene(model, options = {}) {
+  const {
+    rotationY = 0,
+    offsetX = 0,
+    offsetY = 0,
+    offsetZ = 0,
+    preserveOriginalY = false
+  } = options
+
+  const originalY = model.position.y
+
+  model.position.set(0, preserveOriginalY ? originalY : 0, 0)
+  model.scale.set(1, 1, 1)
+  model.rotation.set(0, rotationY, 0)
+  model.updateMatrixWorld(true)
+
+  const buildingBox = new THREE.Box3().setFromObject(model)
+  const buildingSize = buildingBox.getSize(new THREE.Vector3())
+
+  if (buildingSize.length() === 0) {
+    console.warn('GLB 尺寸為 0，無法對齊')
+    return
+  }
+
+  let terrainCenter = new THREE.Vector3(0, 0, 0)
+  let terrainSize = new THREE.Vector3(GRID_SIZE * 0.92, 0, GRID_SIZE * 0.92)
+  let terrainMinY = 0
+
+  if (terrainModel) {
+    const terrainBox = new THREE.Box3().setFromObject(terrainModel)
+    const currentTerrainSize = terrainBox.getSize(new THREE.Vector3())
+
+    if (currentTerrainSize.length() > 0) {
+      terrainCenter = terrainBox.getCenter(new THREE.Vector3())
+      terrainSize = currentTerrainSize
+      terrainMinY = terrainBox.min.y
+    }
+  }
+
+  const scaleX = terrainSize.x / Math.max(buildingSize.x, 1)
+  const scaleZ = terrainSize.z / Math.max(buildingSize.z, 1)
+  const scale = Math.min(scaleX, scaleZ)
+
+  model.scale.setScalar(scale)
+  model.updateMatrixWorld(true)
+
+  const scaledBox = new THREE.Box3().setFromObject(model)
+  const scaledCenter = scaledBox.getCenter(new THREE.Vector3())
+
+  model.position.x += terrainCenter.x - scaledCenter.x
+  model.position.z += terrainCenter.z - scaledCenter.z
+  model.updateMatrixWorld(true)
+
+  if (!preserveOriginalY) {
+    const alignedBox = new THREE.Box3().setFromObject(model)
+    model.position.y += terrainMinY - alignedBox.min.y
+    model.updateMatrixWorld(true)
+  }
+
+  model.position.x += offsetX
+  model.position.y += offsetY
+  model.position.z += offsetZ
+  model.updateMatrixWorld(true)
+}
+
+function fitModelToGridBoundary(model) {
+  model.position.set(0, 0, 0)
+  model.scale.set(1, 1, 1)
+  model.updateMatrixWorld(true)
+
+  const rawBox = new THREE.Box3().setFromObject(model)
+  const rawSize = rawBox.getSize(new THREE.Vector3())
+
+  if (rawSize.length() === 0) {
+    setDebug('模型尺寸為 0，無法縮放')
+    return
+  }
+
+  const fitRatio = 0.92
+  const targetFootprint = GRID_SIZE * fitRatio
+
+  const modelWidth = rawSize.x
+  const modelDepth = rawSize.z
+  const horizontalMax = Math.max(modelWidth, modelDepth, 1)
+
+  const scale = targetFootprint / horizontalMax
+  model.scale.setScalar(scale)
+  model.updateMatrixWorld(true)
+
+  const box = new THREE.Box3().setFromObject(model)
+
+  const bottomCenterX = (box.min.x + box.max.x) * 0.5
+  const bottomCenterY = box.min.y
+  const bottomCenterZ = (box.min.z + box.max.z) * 0.5
+
+  model.position.x -= bottomCenterX
+  model.position.y -= bottomCenterY
+  model.position.z -= bottomCenterZ
+  model.updateMatrixWorld(true)
+}
+
+function focusCameraOnObject(object) {
+  if (!camera || !controls || !object) return
+
+  const box = new THREE.Box3().setFromObject(object)
+  const size = box.getSize(new THREE.Vector3())
+  const center = box.getCenter(new THREE.Vector3())
+
+  if (size.length() === 0) {
+    setDebug('模型尺寸為 0，無法對焦')
+    return
+  }
+
+  const maxDim = Math.max(size.x, size.y, size.z)
+  const fov = camera.fov * (Math.PI / 180)
+  let distance = maxDim / (2 * Math.tan(fov / 2))
+
+  distance *= 1.8
+
+  const direction = new THREE.Vector3(1, 0.75, 1).normalize()
+
+  camera.up.set(0, 1, 0)
+  camera.position.copy(center.clone().add(direction.multiplyScalar(distance)))
+  controls.target.copy(center)
+  camera.near = Math.max(0.1, distance / 1000)
+  camera.far = Math.max(5000, distance * 20)
+  camera.updateProjectionMatrix()
+  controls.update()
+}
+
+function resetView() {
+  if (!camera || !controls) return
+
+  savedRoadSelectionView = null
+
+  camera.up.set(0, 1, 0)
+  camera.position.copy(initialCameraPosition)
+  controls.target.copy(initialTargetPosition)
+  camera.updateProjectionMatrix()
+  controls.update()
+
+  setDebug('視角已重設')
+}
+
+function toggleGrid() {
+  if (!gridHelper) return
+  showGrid.value = !showGrid.value
+  gridHelper.visible = showGrid.value
+}
+
+function toggleAxes() {
+  if (!axesHelper) return
+  showAxes.value = !showAxes.value
+  axesHelper.visible = showAxes.value
+}
+
+// =========================
+// 清除模型
+// =========================
+function clearGeneratedBuildingModels() {
+  if (generatedBuilding && scene) {
+    scene.remove(generatedBuilding)
+    disposeObject(generatedBuilding)
+    generatedBuilding = null
+  }
+
+  if (generatedBuildingN && scene) {
+    scene.remove(generatedBuildingN)
+    disposeObject(generatedBuildingN)
+    generatedBuildingN = null
+  }
+
+  stepApartmentCount.value = 0
+  normalBuildingCount.value = 0
+}
+
+function clearRoofSpaceModels() {
+  if (roofAreaModel && scene) {
+    scene.remove(roofAreaModel)
+    disposeObject(roofAreaModel)
+    roofAreaModel = null
+  }
+
+  if (roofCommercialModel && scene) {
+    scene.remove(roofCommercialModel)
+    disposeObject(roofCommercialModel)
+    roofCommercialModel = null
+  }
+
+  if (roofOpenModel && scene) {
+    scene.remove(roofOpenModel)
+    disposeObject(roofOpenModel)
+    roofOpenModel = null
+  }
+}
+
+function clearMutationModels() {
+  Object.keys(mutationModelObjects).forEach((key) => {
+    const obj = mutationModelObjects[key]
+    if (obj && scene) {
+      scene.remove(obj)
+      disposeObject(obj)
+      delete mutationModelObjects[key]
+    }
+  })
+}
+
+function resetMutationCounts() {
+  mutationModelCounts.value = {
+    heteroRoof: 0,
+    heteroTcode: 0,
+    heteroRoof1: 0,
+    heteroPatharea: 0,
+    heteroRaps: 0,
+    aiRoad: 0,
+    aiTcode: 0,
+    aiRaps: 0
+  }
+}
+
+function clearProjectModels() {
+  savedRoadSelectionView = null
+
+  if (terrainModel && scene) {
+    scene.remove(terrainModel)
+    disposeObject(terrainModel)
+    terrainModel = null
+  }
+
+  clearGeneratedBuildingModels()
+  clearRoofSpaceModels()
+  clearAiHeatmapPlane()
+  clearAiRoadModel()
+  clearManualPath()
+
+  roofSpaceGenerated.value = false
+  roofUsableArea.value = 0
+  roofCommercialArea.value = 0
+  roofOpenArea.value = 0
+  renewalFloorAreaRatio.value = 0
+}
+
+function disposeObject(object) {
+  if (!object) return
+
+  object.traverse((child) => {
+    if (child.geometry) {
+      child.geometry.dispose()
+    }
+
+    if (child.material) {
+      if (Array.isArray(child.material)) {
+        child.material.forEach((material) => {
+          if (material && material.dispose) {
+            material.dispose()
+          }
+        })
+      } else if (child.material.dispose) {
+        child.material.dispose()
+      }
+    }
+  })
+}
+
+// =========================
+// Watch / Lifecycle
+// =========================
+watch(currentStep, async (newStep) => {
+  if (newStep === 1) {
+    await nextTick()
+
+    if (!overviewRef.value) return
+
+    if (overviewRenderer) {
+      if (overviewRenderer.domElement.parentNode) {
+        overviewRenderer.domElement.parentNode.removeChild(overviewRenderer.domElement)
+      }
+
+      overviewRenderer.dispose()
+      overviewRenderer = null
+    }
+
+    overviewCamera = null
+    initOverviewScene()
+  }
+})
+
+onMounted(async () => {
+  await nextTick()
+  initScene()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onWindowResize)
+
+  if (animationId) {
+    cancelAnimationFrame(animationId)
+  }
+
+  if (renderer?.domElement) {
+    renderer.domElement.removeEventListener('pointerdown', handleManualPathPointerDown)
+  }
+
+  clearProjectModels()
+
+  if (controls) {
+    controls.dispose()
+    controls = null
+  }
+
+  if (renderer) {
+    renderer.dispose()
+
+    if (renderer.domElement && renderer.domElement.parentNode) {
+      renderer.domElement.parentNode.removeChild(renderer.domElement)
+    }
+
+    renderer = null
+  }
+
+  if (overviewRenderer) {
+    overviewRenderer.dispose()
+
+    if (overviewRenderer.domElement && overviewRenderer.domElement.parentNode) {
+      overviewRenderer.domElement.parentNode.removeChild(overviewRenderer.domElement)
+    }
+
+    overviewRenderer = null
+  }
+
+  scene = null
+  camera = null
+  overviewCamera = null
+  sceneReady = false
+})
+</script>
+
+<style scoped>
+.app-layout {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+  background: #f3f3f3;
+}
+
+.sidebar {
+  position: relative;
+  width: 340px;
+  height: 100%;
+  background: #ffffff;
+  border-right: 1px solid #e5e5e5;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.sidebar-header {
+  padding: 28px 24px 20px;
+  border-bottom: 1px solid #ececec;
+}
+
+.sidebar-title-main {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+  color: #111111;
+  line-height: 1.1;
+}
+
+.sidebar-title-sub {
+  margin: 8px 0 20px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #444444;
+  line-height: 1.5;
+}
+
+.sidebar-meta-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.meta-inline-card {
+  flex: 1;
+  min-width: 0;
+  padding: 14px 14px;
+  border-radius: 16px;
+  background: #f8f8f8;
+  border: 1px solid #ececec;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-meta-inline-card {
+  position: relative;
+  padding-right: 50px;
+}
+
+.meta-inline-label {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 800;
+  color: #111111;
+}
+
+.meta-inline-value {
+  font-size: 12px;
+  color: #444444;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.file-name-inline {
+  padding-right: 2px;
+}
+
+.icon-btn {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 12px;
+  background: #ececec;
+  color: #111111;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  font-size: 18px;
+}
+
+.icon-btn-symbol {
+  display: block;
+  line-height: 1;
+}
+
+.sidebar-content {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.terrain-panel,
+.analysis-panel,
+.step-page-card {
+  padding: 16px;
+  border-radius: 16px;
+  background: #f8f8f8;
+  border: 1px solid #ececec;
+}
+
+.inner-panel {
+  margin-top: 16px;
+  background: #ffffff;
+}
+
+.terrain-panel-title,
+.analysis-title {
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #111111;
+  text-align: center;
+}
+
+.terrain-preview-box {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px #e8e8e8;
+}
+
+.terrain-preview-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.generate-btn {
+  width: 100%;
+  height: 44px;
+  margin-top: 14px;
+  border: none;
+  border-radius: 12px;
+  background: #111111;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pie-chart-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 6px 0 10px;
+}
+
+.pie-chart {
+  width: 160px;
+  height: 160px;
+}
+
+.analysis-text {
+  text-align: center;
+  font-size: 14px;
+  color: #444444;
+  line-height: 1.7;
+}
+
+.analysis-total {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: #111111;
+}
+
+.step-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.back-mini-btn {
+  align-self: flex-start;
+  height: 36px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 10px;
+  background: #ececec;
+  color: #111111;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.volume-title {
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #111111;
+}
+
+.result-empty-text {
+  text-align: center;
+  font-size: 14px;
+  color: #666666;
+  padding: 30px 0 10px;
+}
+
+.sidebar-footer {
+  padding: 16px 20px 20px;
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid #ececec;
+}
+
+.sidebar-next-btn {
+  min-width: 96px;
+  height: 40px;
+  border: none;
+  border-radius: 12px;
+  background: #111111;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.side-modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 100px 18px 18px;
+  z-index: 30;
+}
+
+.side-modal-card {
+  position: relative;
+  width: 100%;
+  border-radius: 22px;
+  background: #ffffff;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.14);
+  border: 1px solid #ececec;
+  padding: 22px 18px 18px;
+  box-sizing: border-box;
+}
+
+.side-modal-close {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #111111;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.side-modal-title {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: #111111;
+  margin-bottom: 20px;
+}
+
+.side-modal-body {
+  padding-top: 6px;
+}
+
+.open-file-btn {
+  width: 100%;
+  height: 44px;
+  border: none;
+  border-radius: 12px;
+  background: #ececec;
+  color: #111111;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.side-modal-file-text {
+  margin: 12px 0 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #555555;
+  word-break: break-word;
+}
+
+.side-modal-footer {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.modal-cancel-btn {
+  min-width: 84px;
+  height: 40px;
+  border: 1px solid #111111;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #111111;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.modal-confirm-btn {
+  min-width: 84px;
+  height: 40px;
+  border: none;
+  border-radius: 12px;
+  background: #9c9c9c;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.modal-confirm-btn:disabled {
+  background: #d2d2d2;
+  cursor: not-allowed;
+}
+
+.viewer-area {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  padding: 18px;
+  box-sizing: border-box;
+}
+
+.viewer-frame {
+  width: 100%;
+  height: 100%;
+  border-radius: 26px;
+  overflow: hidden;
+  background: #f5f5f5;
+  box-shadow: inset 0 0 0 1px #e8e8e8;
+}
+
+.three-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.viewer-legend {
+  position: absolute;
+  left: 38px;
+  bottom: 38px;
+  z-index: 23;
+  min-width: 190px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.viewer-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #222222;
+  line-height: 1.4;
+}
+
+.viewer-legend-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+}
+
+.path-draw-hint {
+  position: absolute;
+  left: 50%;
+  top: 38px;
+  transform: translateX(-50%);
+  z-index: 24;
+  width: min(520px, calc(100% - 120px));
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #111111;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+.debug-box {
+  position: absolute;
+  right: 38px;
+  bottom: 38px;
+  z-index: 20;
+  min-width: 260px;
+  max-width: 520px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(17, 17, 17, 0.82);
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(8px);
+}
+
+.preview-toolbar {
+  position: absolute;
+  right: 38px;
+  bottom: 90px;
+  z-index: 20;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.toolbar-btn {
+  height: 40px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #111111;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  backdrop-filter: blur(8px);
+  transition: 0.2s ease;
+}
+
+.toolbar-btn:hover {
+  transform: translateY(-1px);
+  background: #ffffff;
+}
+
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(4px);
+}
+
+.modal-card {
+  width: 85vw;
+  height: 85vh;
+  max-width: 1280px;
+  max-height: 900px;
+  padding: 48px;
+  border-radius: 30px;
+  background: #ffffff;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-title {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #111111;
+  display: block;
+  margin: 0 auto 20px;
+}
+
+.welcome-hero-block {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin: 24px 0 32px;
+}
+
+.welcome-hero-image {
+  display: block;
+  max-width: 300px;
+  width: 100%;
+  height: 300px;
+  object-fit: contain;
+  border-radius: 20px;
+}
+
+.modal-text {
+  font-size: 35px;
+  color: #444444;
+  display: block;
+  margin: 0 auto;
+}
+
+.modal-label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #222222;
+}
+
+.modal-input {
+  width: auto;
+  height: 54px;
+  padding: 0 16px;
+  border: 1px solid #d9d9d9;
+  border-radius: 14px;
+  font-size: 16px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.modal-input:focus {
+  border-color: #111111;
+}
+
+.modal-inline-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: fit-content;
+  margin: 0 auto;
+  flex-wrap: nowrap;
+}
+
+.modal-inline-label {
+  display: inline-block;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.modal-inline-input {
+  width: 200px;
+  margin: 0;
+}
+
+.modal-divider {
+  display: inline-block;
+  color: #888;
+  line-height: 1;
+}
+
+.modal-action-btn {
+  min-width: 180px;
+  height: 46px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 12px;
+  background: #ececec;
+  color: #111111;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  display: block;
+  margin: 0 auto;
+}
+
+.modal-inline-btn {
+  margin: 0;
+  min-width: 160px;
+  height: 46px;
+  flex-shrink: 0;
+}
+
+.modal-file-text {
+  margin-top: 12px;
+  font-size: 14px;
+  color: #555555;
+}
+
+.modal-inline-file-text {
+  display: inline-block;
+  margin: 0;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.modal-footer {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.modal-start-btn {
+  min-width: 160px;
+  height: 50px;
+  padding: 0 24px;
+  border: none;
+  border-radius: 14px;
+  background: #111111;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.modal-start-btn:disabled {
+  background: #bfbfbf;
+  cursor: not-allowed;
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.roof-space-card,
+.mutation-page-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.roof-area-total {
+  margin: 4px 0 8px;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 800;
+  color: #111111;
+}
+
+.ca-two-line-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mutation-single-hero {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #ebebeb;
+}
+
+.mutation-card-image-box {
+  width: clamp(96px, 42%, 160px);
+  min-width: 96px;
+  aspect-ratio: 1 / 1;
+  align-self: flex-start;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #f3f3f3;
+  flex-shrink: 0;
+}
+
+.mutation-single-image-box {
+  width: 96px;
+  min-width: 96px;
+}
+
+.mutation-card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.mutation-card-summary-text-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.mutation-card-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #111111;
+  text-align: left;
+  line-height: 1.2;
+}
+
+.mutation-card-text {
+  font-size: 14px;
+  color: #333333;
+  line-height: 1.65;
+  text-align: left;
+}
+
+.mutation-control-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #fafafa;
+  border: 1px solid #ececec;
+  border-radius: 16px;
+  padding: 12px;
+}
+
+.mutation-inline-row,
+.mutation-dual-text-row,
+.mutation-detail-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mutation-street-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.street-select-btn {
+  min-width: 86px;
+}
+
+.street-confirm-btn,
+.street-clear-btn {
+  min-width: 64px;
+}
+
+.street-clear-btn {
+  background: #ffffff;
+  color: #d93025;
+  border-color: #d93025;
+}
+
+.mutation-dual-text-row {
+  justify-content: space-between;
+}
+
+.mini-ghost-btn {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d7d7d7;
+  border-radius: 10px;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mutation-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mutation-detail-item {
+  background: #fafafa;
+  border: 1px solid #ececec;
+  border-radius: 16px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mutation-detail-item-wide {
+  grid-column: 1 / -1;
+}
+
+.mutation-text-note {
+  grid-column: 1 / -1;
+  font-size: 14px;
+  font-weight: 700;
+  color: #222222;
+}
+
+.mutation-path-row {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
+.mutation-number-input {
+  width: 120px;
+  height: 34px;
+  border: 1px solid #d6d6d6;
+  border-radius: 10px;
+  padding: 0 10px;
+}
+
+.mutation-generate-btn {
+  align-self: flex-start;
+  min-width: 150px;
+  margin-top: 0;
+}
+
+
+.road-selection-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #fafafa;
+  border: 1px solid #ececec;
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.road-selection-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #111111;
+}
+
+.road-mode-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.road-mode-btn {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #d7d7d7;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #111111;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.road-mode-btn.active {
+  background: #111111;
+  border-color: #111111;
+  color: #ffffff;
+}
+
+.road-sub-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #ebebeb;
+}
+
+.road-sub-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #111111;
+}
+
+.road-ai-preview-box {
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f3f3f3;
+  border: 1px solid #ececec;
+}
+
+.road-ai-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+}
+
+.manual-draw-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.street-reset-btn {
+  min-width: 64px;
+  background: #ffffff;
+  color: #d93025;
+  border-color: #d93025;
+}
+
+.road-confirm-btn {
+  width: 100%;
+  min-width: 64px;
+  height: 40px;
+  background: #111111;
+  color: #ffffff;
+  border-color: #111111;
+}
+
+.ai-heatmap-viewer {
+  position: absolute;
+  left: 38px;
+  top: 38px;
+  z-index: 22;
+  width: min(420px, 42vw);
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(10px);
+}
+
+.ai-heatmap-title {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #111111;
+}
+
+.ai-heatmap-image {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+
+@media (max-width: 860px) {
+  .mutation-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mutation-street-row,
+  .road-mode-row,
+  .manual-draw-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-heatmap-viewer {
+    width: calc(100% - 76px);
+  }
+}
+</style>
